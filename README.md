@@ -42,10 +42,7 @@ python scripts/run_track2map.py \
   --visualize
 ```
 
-Behavior:
-- uses FoundationStereo(FixScale) depth,
-- disables pose optimization,
-- follows provided clean pose.
+
 
 ### Mode B: noisy
 
