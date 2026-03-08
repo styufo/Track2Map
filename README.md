@@ -161,14 +161,5 @@ For reconstruction metrics (`PSNR/SSIM/LPIPS`), run with `--visualize`; otherwis
 
 ---
 
-## 7) Publish to GitHub
 
-```bash
-cd Track2Map
-git init
-git add .
-git commit -m "Initial clean Track2Map release"
-git branch -M main
-git remote add origin git@github.com:<your_user>/Track2Map.git
-git push -u origin main
 ```
