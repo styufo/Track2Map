@@ -17,12 +17,7 @@ This repo keeps runnable paths for 3 practical modes:
 ```bash
 conda env create -f environment.yml
 conda activate track2map
-```
 
-
-```
-### Build CUDA submodules
-```bash
 pip install -e src/submodules/gaussian-rasterization
 pip install -e src/submodules/simple-knn
 ```
