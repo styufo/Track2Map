@@ -12,7 +12,7 @@ This repo keeps runnable paths for 3 practical modes:
 
 ---
 
-## 1) Environment (from scratch)
+## 1) Environment
 
 ```bash
 conda env create -f environment.yml
@@ -21,58 +21,21 @@ conda activate track2map
 
 
 ```
-
-### Build CUDA submodules (required)
-
-`run.py` depends on `src/submodules/simple-knn` and `src/submodules/gaussian-rasterization`.
-
+### Build CUDA submodules
 ```bash
-export PATH="$CONDA_PREFIX/bin:$PATH"
-export CUDA_HOME="$CONDA_PREFIX"
-export CUDACXX="$CONDA_PREFIX/bin/nvcc"
-export CPATH="$CONDA_PREFIX/targets/x86_64-linux/include:${CPATH}"
-export LIBRARY_PATH="$CONDA_PREFIX/targets/x86_64-linux/lib:${LIBRARY_PATH}"
-export LD_LIBRARY_PATH="$CONDA_PREFIX/targets/x86_64-linux/lib:${LD_LIBRARY_PATH}"
-
-pip install --no-build-isolation -e src/submodules/simple-knn
-pip install --no-build-isolation -e src/submodules/gaussian-rasterization
+pip install -e src/submodules/gaussian-rasterization
+pip install -e src/submodules/simple-knn
 ```
 
-### Quick sanity check
 
-```bash
-python -c "import torch,cv2,open3d,omegaconf,timm; print(torch.__version__, torch.version.cuda)"
-```
 
 ---
 
-## 2) Repo layout
 
-- `run.py`: main training / mapping entry (supports `--visualize`)
-- `src/`: core modules
-- `configs/base.yaml`: base runtime config
-- `configs/final/*_auto_gate_base.yaml`: final per-seq base configs
-- `scripts/run_track2map.py`: unified launcher for the 3 modes
 
-Final sequence-policy mapping kept in this repo:
-- `P1_1 -> GateC`
-- `P2_0/P2_1 -> P2S_staticheavy`
-- `P3_1/P3_2 -> P4`
-
----
-
-## 3) Unified launcher
+## 2) Unified launcher
 
 Use `scripts/run_track2map.py` for all modes.
-
-### Common args
-
-- `--seq`: `P1_1 | P2_0 | P2_1 | P3_1 | P3_2`
-- `--input-folder`: sequence folder
-- `--output`: output folder
-- `--flow-init-source`: `raft | cotracker3 | hybrid | foundation | hybrid_foundation` (default: `hybrid`)
-- `--visualize`: enable online visualization outputs
-- `--pose-file`: required in `clean_pose` and `noisy_auto_gate`
 
 ### Mode A: clean pose
 
@@ -91,7 +54,7 @@ Behavior:
 - disables pose optimization,
 - follows provided clean pose.
 
-### Mode B: noisy + auto gate
+### Mode B: noisy
 
 ```bash
 python scripts/run_track2map.py \
@@ -131,18 +94,6 @@ Behavior:
 
 ---
 
-## 4) FoundationStereo paths
-
-Launcher defaults:
-
-- `--foundation-root /home/tianyi/external/FoundationStereo`
-- `--foundation-ckpt /home/tianyi/external/FoundationStereo/pretrained_models/23-51-11/model_best_bp2.pth`
-- `--foundation-cfg /home/tianyi/external/FoundationStereo/pretrained_models/23-51-11/cfg.yaml`
-- `--foundation-intrinsic-file /home/tianyi/external/FoundationStereo/assets/K.txt`
-
-Override them in command line if needed.
-
----
 
 ## 5) Visual outputs
 
@@ -152,14 +103,4 @@ For reconstruction metrics (`PSNR/SSIM/LPIPS`), run with `--visualize`; otherwis
 
 ---
 
-## 6) Troubleshooting
 
-- `No module named 'simple_knn'` / `diff_gaussian_rasterization`: reinstall the two submodules with the commands above.
-- CUDA mismatch during build: ensure `nvcc` is from the active env (`which nvcc`) and matches torch CUDA (`python -c "import torch; print(torch.version.cuda)"`).
-- `wandb` + `numpy` compatibility: use `wandb>=0.25.0`.
-- FoundationStereo import errors: verify `--foundation-root`, checkpoint, cfg, and intrinsic paths.
-
----
-
-
-```
