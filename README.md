@@ -5,9 +5,7 @@ Official repository for Track2Map: Online Deformable SLAM with Motion-Aware Pose
 This repo keeps runnable paths for 3 practical modes:
 
 1. **`clean_pose`**: use dataset camera poses directly, no pose initialization from scratch, no pose optimization.
-2. **`noisy_auto_gate`**: start from noisy pose, and use first-frame trust gate to switch between:
-   - noisy-pose optimization route (for light noise, e.g. 1x),
-   - no-pose-prior route (for heavy noise, e.g. 10x).
+2. **`noisy_auto_gate`**: start from noisy pose.
 3. **`no_pose`**: no camera pose provided; start from no prior and estimate+optimize online.
 
 ---
