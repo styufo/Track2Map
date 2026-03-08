@@ -1,0 +1,30 @@
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Runtime outputs
+output/
+outputs/
+logs/
+runs/
+vis/
+videos/
+results/
+artifacts/
+checkpoints/
+wandb/
+tensorboard/
+
+# Generated configs / debugging
+tmp/
+*.log
+*.tmp
+
+# System files
+.DS_Store
+Thumbs.db
