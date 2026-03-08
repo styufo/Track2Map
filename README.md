@@ -1,8 +1,8 @@
 # Track2Map
 
-Track2Map is a cleaned release of our online tracking-to-mapping pipeline with **FoundationStereo (FixScale)** depth.
+Official repository for Track2Map: Online Deformable SLAM with Motion-Aware Pose Optimization in Robotic Surgery.
 
-This repo keeps only the final runnable paths for 3 practical modes:
+This repo keeps runnable paths for 3 practical modes:
 
 1. **`clean_pose`**: use dataset camera poses directly, no pose initialization from scratch, no pose optimization.
 2. **`noisy_auto_gate`**: start from noisy pose, and use first-frame trust gate to switch between:
@@ -14,22 +14,12 @@ This repo keeps only the final runnable paths for 3 practical modes:
 
 ## 1) Environment (from scratch)
 
-This repo is tested with a clean conda environment (no cloning from existing envs).
-
-### Option A (recommended): conda yaml
-
 ```bash
 conda env create -f environment.yml
 conda activate track2map
 ```
 
-### Option B: manual install
 
-```bash
-conda create -y -n track2map python=3.10 pip
-conda activate track2map
-pip install -r requirements.txt
-conda install -y -c nvidia cuda-nvcc=12.1 cuda-cccl=12.1
 ```
 
 ### Build CUDA submodules (required)
