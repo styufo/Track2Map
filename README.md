@@ -57,16 +57,6 @@ python scripts/run_track2map.py \
   --visualize
 ```
 
-Gate profiles:
-- `--gate-profile 1x`: relaxed thresholds (target: mostly no trigger),
-- `--gate-profile 10x`: strict thresholds (target: high trigger rate),
-- `--gate-profile auto` (default): infer by pose-file name (`x10/transx10/noisyx10` -> `10x`, else `1x`).
-
-When triggered, fallback route is:
-- `pose_init_mode = no_prior`
-- `w_pose_prior = 0.0`
-- no-prior VO chain enabled.
-
 ### Mode C: no pose prior
 
 ```bash
@@ -78,16 +68,14 @@ python scripts/run_track2map.py \
   --visualize
 ```
 
-Behavior:
-- ignores external pose file,
-- starts from no prior and optimizes online.
+
 
 ---
 
 
 ## 5) Visual outputs
 
-`--visualize` keeps the same online visualization path as prior workflow (render/mapping videos and related visualization outputs in each run folder).
+`--visualize` render/mapping videos and related visualization outputs in each run folder.
 
 For reconstruction metrics (`PSNR/SSIM/LPIPS`), run with `--visualize`; otherwise `raw_rgb/raw_depth` may stay empty.
 
