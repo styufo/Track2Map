@@ -21,12 +21,12 @@ pip install -e src/submodules/simple-knn
 ```
 Please set up the respective environments and permissions according to [CoTracker3-online](https://github.com/facebookresearch/co-tracker) and [FoundationStereo](https://github.com/NVlabs/FoundationStereo).
 
-Override these defaults in your own path:
+Override these launcher defaults in your own path:
 
-- `--foundation-root /home/tianyi/external/FoundationStereo`
-- `--foundation-ckpt /home/tianyi/external/FoundationStereo/pretrained_models/23-51-11/model_best_bp2.pth`
-- `--foundation-cfg /home/tianyi/external/FoundationStereo/pretrained_models/23-51-11/cfg.yaml`
-- `--foundation-intrinsic-file /home/tianyi/external/FoundationStereo/assets/K.txt`
+- `--foundation-root `
+- `--foundation-ckpt `
+- `--foundation-cfg `
+- `--foundation-intrinsic-file `
 
 
 
