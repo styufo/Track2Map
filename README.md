@@ -82,6 +82,6 @@ For reconstruction metrics (`PSNR/SSIM/LPIPS`), run with `--visualize`; otherwis
 ---
 
 ## 4) Acknowledgements
-Our code is based on Online-endo-track, our depth estimation is based on Foundation stereo, and our tracking method is based on Cotracker-3. We thank the authors for their excellent work!
+Our code is based on [Online-endo-track](https://github.com/mhayoz/online_endo_track), our depth estimation is based on [FoundationStereo](https://github.com/NVlabs/FoundationStereo), and our tracking method is based on [CoTracker3](https://github.com/facebookresearch/co-tracker). We thank the authors for their excellent work!
 
 
