@@ -2,6 +2,11 @@
 
 Official repository for Track2Map: Online Deformable SLAM with Motion-Aware Pose Optimization in Robotic Surgery.
 
+## Demo Video
+
+You can download/watch the demo video here:
+[Track2Map_v1.mp4](Track2Map_v1.mp4)
+
 This repo keeps runnable paths for 3 practical modes:
 
 1. **`clean_pose`**: use dataset camera poses directly, no pose initialization from scratch, no pose optimization.
