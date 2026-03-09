@@ -73,12 +73,15 @@ python scripts/run_track2map.py \
 ---
 
 
-## 5) Visual outputs
+## 3) Visual outputs
 
 `--visualize` render/mapping videos and related visualization outputs in each run folder.
 
 For reconstruction metrics (`PSNR/SSIM/LPIPS`), run with `--visualize`; otherwise `raw_rgb/raw_depth` may stay empty.
 
 ---
+
+## 4) Acknowledgements
+Our code is based on Online-endo-track, our depth estimation is based on Foundation stereo, and our tracking method is based on Cotracker-3. We thank the authors for their excellent work!
 
 
