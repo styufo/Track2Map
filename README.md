@@ -5,7 +5,7 @@ Official repository for Track2Map: Online Deformable SLAM with Motion-Aware Pose
 ## Demo Video
 
 You can download/watch the demo video here:
-[Track2Map_v1.mp4](Track2Map_v1.mp4)
+[Track2Map_demo.mp4](assets/vis.mov)
 
 This repo keeps runnable paths for 3 practical modes:
 
