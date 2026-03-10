@@ -46,10 +46,10 @@ Override these launcher defaults in your own path:
 
 
 ---
+## 2) Dataset prepare
+Download the data from [StereoMIS Tracking](https://zenodo.org/records/10867949) and unpack it in the repository base folder.
 
-
-
-## 2) Unified launcher
+## 3) Unified launcher
 
 Use `scripts/run_track2map.py` for all modes.
 
@@ -96,7 +96,7 @@ python scripts/run_track2map.py \
 ---
 
 
-## 3) Visual outputs
+## 4) Visual outputs
 
 `--visualize` render/mapping videos and related visualization outputs in each run folder.
 
@@ -104,6 +104,6 @@ For reconstruction metrics (`PSNR/SSIM/LPIPS`), run with `--visualize`; otherwis
 
 ---
 
-## 4) Acknowledgements
+## 5) Acknowledgements
 Our code is based on [Online-endo-track](https://github.com/mhayoz/online_endo_track), our depth estimation is based on [FoundationStereo](https://github.com/NVlabs/FoundationStereo), and our tracking method is based on [CoTracker3](https://github.com/facebookresearch/co-tracker). We thank the authors for their excellent work!
 
