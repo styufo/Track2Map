@@ -1,0 +1,15 @@
+input_root: /path/to/steremis_tracking
+out_root: /path/to/stereomis_noisy_light
+seq:
+  - P1_1
+  - P2_0
+  - P2_1
+  - P3_1
+  - P3_2
+
+trans_sigma: 0.0006
+rot_sigma_deg: 0.6
+noise_distribution: uniform
+motion_iid_trans_scale: 2.0
+motion_iid_rot_scale: 1.8
+seed: 42

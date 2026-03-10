@@ -55,38 +55,34 @@ We provide a reproducible script to perturb StereoMIS `groundtruth.txt` and gene
 
 - Script: `scripts/perturb_stereomis_groundtruth.py`
 - Output layout: `<out-root>/<SEQ>/groundtruth_noisy.txt`
+- Config templates:
+  - `configs/StereoMIS/noise/noisy_pose_1x.yaml`
+  - `configs/StereoMIS/noise/noisy_pose_10x.yaml`
 
 ### 1x noisy pose (light noise)
 
 ```bash
 python scripts/perturb_stereomis_groundtruth.py \
-  --input-root /path/to/steremis_tracking \
-  --out-root /path/to/stereomis_noisy_light \
-  --seq P1_1 P2_0 P2_1 P3_1 P3_2 \
-  --trans-sigma 0.0006 \
-  --rot-sigma-deg 0.6 \
-  --noise-distribution uniform \
-  --motion-iid-trans-scale 2.0 \
-  --motion-iid-rot-scale 1.8 \
-  --seed 42
+  --config configs/StereoMIS/noise/noisy_pose_1x.yaml
 ```
 
 ### 10x noisy pose (translation ×10)
 
 ```bash
 python scripts/perturb_stereomis_groundtruth.py \
-  --input-root /path/to/steremis_tracking \
-  --out-root /path/to/stereomis_noisy_light_transx10 \
-  --seq P1_1 P2_0 P2_1 P3_1 P3_2 \
-  --trans-sigma 0.006 \
-  --rot-sigma-deg 0.6 \
-  --noise-distribution uniform \
-  --motion-iid-trans-scale 2.0 \
-  --motion-iid-rot-scale 1.8 \
-  --seed 42
+  --config configs/StereoMIS/noise/noisy_pose_10x.yaml
 ```
 
 `10x` means translation noise is scaled from `0.0006` to `0.006`, while rotation noise remains `0.6 deg`.
+
+CLI arguments override config fields, for example:
+
+```bash
+python scripts/perturb_stereomis_groundtruth.py \
+  --config configs/StereoMIS/noise/noisy_pose_1x.yaml \
+  --input-root /path/to/steremis_tracking \
+  --out-root /path/to/stereomis_noisy_light
+```
 
 ## 4) Unified launcher
 

@@ -4,11 +4,40 @@ import json
 import math
 import random
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Sequence, Tuple
+
+try:
+    import yaml
+except Exception:
+    yaml = None
 
 
 Quaternion = Tuple[float, float, float, float]
 Translation = Tuple[float, float, float]
+
+DEFAULT_CONFIG: Dict[str, Any] = {
+    "input_root": None,
+    "out_root": None,
+    "seq": None,
+    "trans_sigma": 0.0006,
+    "rot_sigma_deg": 0.6,
+    "noise_distribution": "uniform",
+    "motion_iid_trans_scale": 2.0,
+    "motion_iid_rot_scale": 1.8,
+    "trans_drift_sigma": 0.0,
+    "rot_drift_sigma_deg": 0.0,
+    "seed": 42,
+    "noise_first_pose": False,
+    "no_freeze_on_stationary": False,
+    "stationary_trans_thresh": 5e-5,
+    "stationary_rot_thresh_deg": 0.02,
+    "no_lock_translation_on_pure_rotation": False,
+    "pure_rotation_trans_thresh": 5e-5,
+    "pure_rotation_rot_min_deg": 0.02,
+    "overwrite": False,
+}
+
+CONFIG_GROUP_KEYS = {"dataset", "noise", "options", "params", "pose_noise"}
 
 
 def quat_normalize(quaternion: Quaternion) -> Quaternion:
@@ -247,31 +276,155 @@ def discover_sequences(input_root: Path, selected: Sequence[str] | None) -> List
     return results
 
 
+def parse_bool(name: str, value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"1", "true", "yes", "y", "on"}:
+            return True
+        if lowered in {"0", "false", "no", "n", "off"}:
+            return False
+    raise ValueError(f"Invalid boolean for '{name}': {value!r}")
+
+
+def normalize_seq_list(value: Any) -> List[str] | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        tokens = []
+        for chunk in value.split(","):
+            tokens.extend([part for part in chunk.strip().split() if part])
+        return tokens or None
+    if isinstance(value, list):
+        tokens: List[str] = []
+        for item in value:
+            if isinstance(item, str):
+                for chunk in item.split(","):
+                    tokens.extend([part for part in chunk.strip().split() if part])
+            else:
+                raise ValueError(f"Invalid sequence item in config: {item!r}")
+        return tokens or None
+    raise ValueError(f"Invalid type for 'seq': {type(value).__name__}")
+
+
+def flatten_config_dict(data: Dict[str, Any], out: Dict[str, Any]) -> None:
+    for key, value in data.items():
+        normalized_key = key.replace("-", "_")
+        if isinstance(value, dict) and normalized_key in CONFIG_GROUP_KEYS:
+            flatten_config_dict(value, out)
+            continue
+        out[normalized_key] = value
+
+
+def load_config_file(path: Path) -> Dict[str, Any]:
+    if not path.is_file():
+        raise FileNotFoundError(f"Config file not found: {path}")
+    suffix = path.suffix.lower()
+    raw_text = path.read_text(encoding="utf-8")
+    if suffix in {".yaml", ".yml"}:
+        if yaml is None:
+            raise RuntimeError("PyYAML is required for YAML config files.")
+        parsed = yaml.safe_load(raw_text)
+    elif suffix == ".json":
+        parsed = json.loads(raw_text)
+    else:
+        raise ValueError(f"Unsupported config extension: {suffix}. Use .yaml/.yml/.json")
+
+    if parsed is None:
+        parsed = {}
+    if not isinstance(parsed, dict):
+        raise ValueError(f"Config root must be a mapping: {path}")
+
+    flat: Dict[str, Any] = {}
+    flatten_config_dict(parsed, flat)
+    return flat
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate noisy StereoMIS poses from groundtruth.")
-    parser.add_argument("--input-root", type=Path, required=True, help="StereoMIS root or one sequence directory.")
-    parser.add_argument("--out-root", type=Path, required=True, help="Output root; saves <out-root>/<seq>/groundtruth_noisy.txt.")
+    parser.add_argument("--config", type=Path, default=None, help="Optional config file (.yaml/.yml/.json).")
+    parser.add_argument("--input-root", type=Path, default=None, help="StereoMIS root or one sequence directory.")
+    parser.add_argument("--out-root", type=Path, default=None, help="Output root; saves <out-root>/<seq>/groundtruth_noisy.txt.")
     parser.add_argument("--seq", nargs="+", default=None, help="Optional sequence list, e.g. P1_1 P2_0 P2_1 P3_1 P3_2.")
 
-    parser.add_argument("--trans-sigma", type=float, default=0.0006)
-    parser.add_argument("--rot-sigma-deg", type=float, default=0.6)
-    parser.add_argument("--noise-distribution", choices=("gaussian", "uniform"), default="uniform")
-    parser.add_argument("--motion-iid-trans-scale", type=float, default=2.0)
-    parser.add_argument("--motion-iid-rot-scale", type=float, default=1.8)
-    parser.add_argument("--trans-drift-sigma", type=float, default=0.0)
-    parser.add_argument("--rot-drift-sigma-deg", type=float, default=0.0)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--noise-first-pose", action="store_true")
+    parser.add_argument("--trans-sigma", type=float, default=None)
+    parser.add_argument("--rot-sigma-deg", type=float, default=None)
+    parser.add_argument("--noise-distribution", choices=("gaussian", "uniform"), default=None)
+    parser.add_argument("--motion-iid-trans-scale", type=float, default=None)
+    parser.add_argument("--motion-iid-rot-scale", type=float, default=None)
+    parser.add_argument("--trans-drift-sigma", type=float, default=None)
+    parser.add_argument("--rot-drift-sigma-deg", type=float, default=None)
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--noise-first-pose", action="store_true", default=None)
 
-    parser.add_argument("--no-freeze-on-stationary", action="store_true")
-    parser.add_argument("--stationary-trans-thresh", type=float, default=5e-5)
-    parser.add_argument("--stationary-rot-thresh-deg", type=float, default=0.02)
-    parser.add_argument("--no-lock-translation-on-pure-rotation", action="store_true")
-    parser.add_argument("--pure-rotation-trans-thresh", type=float, default=5e-5)
-    parser.add_argument("--pure-rotation-rot-min-deg", type=float, default=0.02)
+    parser.add_argument("--no-freeze-on-stationary", action="store_true", default=None)
+    parser.add_argument("--stationary-trans-thresh", type=float, default=None)
+    parser.add_argument("--stationary-rot-thresh-deg", type=float, default=None)
+    parser.add_argument("--no-lock-translation-on-pure-rotation", action="store_true", default=None)
+    parser.add_argument("--pure-rotation-trans-thresh", type=float, default=None)
+    parser.add_argument("--pure-rotation-rot-min-deg", type=float, default=None)
 
-    parser.add_argument("--overwrite", action="store_true")
-    return parser.parse_args()
+    parser.add_argument("--overwrite", action="store_true", default=None)
+    cli_args = parser.parse_args()
+
+    merged: Dict[str, Any] = dict(DEFAULT_CONFIG)
+    if cli_args.config is not None:
+        try:
+            cfg = load_config_file(cli_args.config.expanduser().resolve())
+        except Exception as error:
+            parser.error(str(error))
+        unknown = sorted(set(cfg.keys()) - set(DEFAULT_CONFIG.keys()))
+        if unknown:
+            parser.error(f"Unknown config key(s): {', '.join(unknown)}")
+        merged.update(cfg)
+
+    for key in DEFAULT_CONFIG.keys():
+        value = getattr(cli_args, key, None)
+        if value is not None:
+            merged[key] = value
+
+    try:
+        merged["seq"] = normalize_seq_list(merged["seq"])
+        merged["noise_first_pose"] = parse_bool("noise_first_pose", merged["noise_first_pose"])
+        merged["no_freeze_on_stationary"] = parse_bool(
+            "no_freeze_on_stationary", merged["no_freeze_on_stationary"]
+        )
+        merged["no_lock_translation_on_pure_rotation"] = parse_bool(
+            "no_lock_translation_on_pure_rotation", merged["no_lock_translation_on_pure_rotation"]
+        )
+        merged["overwrite"] = parse_bool("overwrite", merged["overwrite"])
+
+        merged["trans_sigma"] = float(merged["trans_sigma"])
+        merged["rot_sigma_deg"] = float(merged["rot_sigma_deg"])
+        merged["motion_iid_trans_scale"] = float(merged["motion_iid_trans_scale"])
+        merged["motion_iid_rot_scale"] = float(merged["motion_iid_rot_scale"])
+        merged["trans_drift_sigma"] = float(merged["trans_drift_sigma"])
+        merged["rot_drift_sigma_deg"] = float(merged["rot_drift_sigma_deg"])
+        merged["stationary_trans_thresh"] = float(merged["stationary_trans_thresh"])
+        merged["stationary_rot_thresh_deg"] = float(merged["stationary_rot_thresh_deg"])
+        merged["pure_rotation_trans_thresh"] = float(merged["pure_rotation_trans_thresh"])
+        merged["pure_rotation_rot_min_deg"] = float(merged["pure_rotation_rot_min_deg"])
+        merged["seed"] = int(merged["seed"])
+    except Exception as error:
+        parser.error(f"Invalid config value: {error}")
+
+    noise_distribution = str(merged["noise_distribution"]).strip().lower()
+    if noise_distribution not in {"gaussian", "uniform"}:
+        parser.error("noise_distribution must be one of: gaussian, uniform")
+    merged["noise_distribution"] = noise_distribution
+
+    if not merged["input_root"]:
+        parser.error("--input-root is required (or set input_root in --config)")
+    if not merged["out_root"]:
+        parser.error("--out-root is required (or set out_root in --config)")
+
+    merged["input_root"] = Path(str(merged["input_root"]))
+    merged["out_root"] = Path(str(merged["out_root"]))
+    merged["config"] = cli_args.config
+    return argparse.Namespace(**merged)
 
 
 def main() -> int:
