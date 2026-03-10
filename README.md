@@ -49,7 +49,46 @@ Override these launcher defaults in your own path:
 ## 2) Dataset prepare
 Download the data from [StereoMIS Tracking](https://zenodo.org/records/10867949) and unpack it in the repository base folder.
 
-## 3) Unified launcher
+## 3) Generate noisy poses from GT (1x / 10x)
+
+We provide a reproducible script to perturb StereoMIS `groundtruth.txt` and generate `groundtruth_noisy.txt`:
+
+- Script: `scripts/perturb_stereomis_groundtruth.py`
+- Output layout: `<out-root>/<SEQ>/groundtruth_noisy.txt`
+
+### 1x noisy pose (light noise)
+
+```bash
+python scripts/perturb_stereomis_groundtruth.py \
+  --input-root /path/to/steremis_tracking \
+  --out-root /path/to/stereomis_noisy_light \
+  --seq P1_1 P2_0 P2_1 P3_1 P3_2 \
+  --trans-sigma 0.0006 \
+  --rot-sigma-deg 0.6 \
+  --noise-distribution uniform \
+  --motion-iid-trans-scale 2.0 \
+  --motion-iid-rot-scale 1.8 \
+  --seed 42
+```
+
+### 10x noisy pose (translation ×10)
+
+```bash
+python scripts/perturb_stereomis_groundtruth.py \
+  --input-root /path/to/steremis_tracking \
+  --out-root /path/to/stereomis_noisy_light_transx10 \
+  --seq P1_1 P2_0 P2_1 P3_1 P3_2 \
+  --trans-sigma 0.006 \
+  --rot-sigma-deg 0.6 \
+  --noise-distribution uniform \
+  --motion-iid-trans-scale 2.0 \
+  --motion-iid-rot-scale 1.8 \
+  --seed 42
+```
+
+`10x` means translation noise is scaled from `0.0006` to `0.006`, while rotation noise remains `0.6 deg`.
+
+## 4) Unified launcher
 
 Use `scripts/run_track2map.py` for all modes.
 
@@ -96,7 +135,7 @@ python scripts/run_track2map.py \
 ---
 
 
-## 4) Visual outputs
+## 5) Visual outputs
 
 `--visualize` render/mapping videos and related visualization outputs in each run folder.
 
@@ -104,6 +143,5 @@ For reconstruction metrics (`PSNR/SSIM/LPIPS`), run with `--visualize`; otherwis
 
 ---
 
-## 5) Acknowledgements
+## 6) Acknowledgements
 Our code is based on [Online-endo-track](https://github.com/mhayoz/online_endo_track), our depth estimation is based on [FoundationStereo](https://github.com/NVlabs/FoundationStereo), and our tracking method is based on [CoTracker3](https://github.com/facebookresearch/co-tracker). We thank the authors for their excellent work!
-
