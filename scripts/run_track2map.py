@@ -59,7 +59,7 @@ def infer_gate_profile_from_pose_file(pose_file: str) -> str:
 
 
 def build_config(args: argparse.Namespace, repo_root: Path) -> Dict[str, Any]:
-    base_cfg_path = repo_root / "configs" / "final" / f"{args.seq}_auto_gate_base.yaml"
+    base_cfg_path = repo_root / "configs" / "StereoMIS" / f"{args.seq}.yaml"
     if not base_cfg_path.is_file():
         raise FileNotFoundError(f"Missing base config: {base_cfg_path}")
     cfg = load_yaml(base_cfg_path)

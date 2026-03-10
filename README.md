@@ -15,6 +15,14 @@ This repo keeps runnable paths for 3 practical modes:
 2. **`noisy_auto_gate`**: start from noisy pose.
 3. **`no_pose`**: no camera pose provided; start from no prior and estimate+optimize online.
 
+Base sequence configs are stored in:
+
+- `configs/StereoMIS/P1_1.yaml`
+- `configs/StereoMIS/P2_0.yaml`
+- `configs/StereoMIS/P2_1.yaml`
+- `configs/StereoMIS/P3_1.yaml`
+- `configs/StereoMIS/P3_2.yaml`
+
 ---
 
 ## 1) Environment
@@ -98,5 +106,4 @@ For reconstruction metrics (`PSNR/SSIM/LPIPS`), run with `--visualize`; otherwis
 
 ## 4) Acknowledgements
 Our code is based on [Online-endo-track](https://github.com/mhayoz/online_endo_track), our depth estimation is based on [FoundationStereo](https://github.com/NVlabs/FoundationStereo), and our tracking method is based on [CoTracker3](https://github.com/facebookresearch/co-tracker). We thank the authors for their excellent work!
-
 
