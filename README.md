@@ -32,17 +32,6 @@ git clone https://github.com/facebookresearch/co-tracker.git cotracker
 git clone https://github.com/NVlabs/FoundationStereo.git foundationstereo
 ```
 
-By default, launcher paths are:
-
-- `foundationstereo/`
-- `foundationstereo/pretrained_models/23-51-11/model_best_bp2.pth`
-- `foundationstereo/pretrained_models/23-51-11/cfg.yaml`
-- `foundationstereo/assets/K.txt`
-- `cotracker/`
-
-
-
-
 ---
 ## 2) Dataset prepare
 Download the data from [StereoMIS Tracking](https://zenodo.org/records/10867949) and unpack it in the repository base folder.
