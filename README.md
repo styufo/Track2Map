@@ -25,7 +25,7 @@ conda activate track2map
 pip install -e src/submodules/gaussian-rasterization
 pip install -e src/submodules/simple-knn
 ```
-Clone external dependencies into fixed folders in this repository:
+Clone external dependencies:
 
 ```bash
 git clone https://github.com/facebookresearch/co-tracker.git cotracker
@@ -40,8 +40,7 @@ By default, launcher paths are:
 - `foundationstereo/assets/K.txt`
 - `cotracker/`
 
-You can still override these with CLI args or environment variables:
-`FOUNDATION_ROOT`, `FOUNDATION_CKPT`, `FOUNDATION_CFG`, `FOUNDATION_INTRINSIC_FILE`, `COTRACKER_REPO`.
+
 
 
 ---
