@@ -25,7 +25,7 @@ conda activate track2map
 pip install -e src/submodules/gaussian-rasterization
 pip install -e src/submodules/simple-knn
 ```
-Clone external dependencies:
+Clone external dependencies and download the [weight](https://drive.google.com/drive/folders/1VhPebc_mMxWKccrv7pdQLTvXYVcLYpsf) of foundation stereo:
 
 ```bash
 git clone https://github.com/facebookresearch/co-tracker.git cotracker
