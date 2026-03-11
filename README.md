@@ -85,7 +85,6 @@ python scripts/run_track2map.py \
   --input-folder /path/to/steremis_tracking/P3_1 \
   --pose-file /path/to/stereomis_noisy_light_transx10/P3_1/groundtruth_noisy.txt \
   --output /path/to/output/p31_noisy_found \
-  --gate-profile auto \
   --visualize
 ```
 
