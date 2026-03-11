@@ -10,7 +10,7 @@ import yaml
 
 
 SEQS = ["P1_1", "P2_0", "P2_1", "P3_1", "P3_2"]
-MODES = ["clean_pose", "noisy_auto_gate", "no_pose"]
+MODES = ["clean_pose", "noisy", "noisy_auto_gate", "no_pose"]
 FLOW_INIT_SOURCES = ["raft", "cotracker3", "hybrid", "foundation", "hybrid_foundation"]
 GATE_PROFILES = ["auto", "1x", "10x"]
 
@@ -115,7 +115,7 @@ def build_config(args: argparse.Namespace, repo_root: Path) -> Dict[str, Any]:
         }
         deep_update(cfg, mode_overrides)
 
-    elif args.mode == "noisy_auto_gate":
+    elif args.mode in ("noisy", "noisy_auto_gate"):
         gate_profile = args.gate_profile
         if gate_profile == "auto":
             gate_profile = infer_gate_profile_from_pose_file(args.pose_file)
@@ -189,7 +189,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    if args.mode in ("clean_pose", "noisy_auto_gate") and not args.pose_file:
+    if args.mode in ("clean_pose", "noisy", "noisy_auto_gate") and not args.pose_file:
         parser.error(f"--pose-file is required for mode '{args.mode}'")
     return args
 
