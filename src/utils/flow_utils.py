@@ -91,7 +91,7 @@ def _require_foundation():
         env_root = os.environ.get("FOUNDATION_STEREO_ROOT", "").strip()
         if env_root:
             candidates.append(os.path.abspath(os.path.expanduser(env_root)))
-        candidates.append("/home/tianyi/external/FoundationStereo")
+        candidates.append("/path/to/FoundationStereo")
 
         for root in candidates:
             if not root:

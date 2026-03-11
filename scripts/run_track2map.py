@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -13,10 +14,20 @@ MODES = ["clean_pose", "noisy_auto_gate", "no_pose"]
 FLOW_INIT_SOURCES = ["raft", "cotracker3", "hybrid", "foundation", "hybrid_foundation"]
 GATE_PROFILES = ["auto", "1x", "10x"]
 
-DEFAULT_FOUNDATION_ROOT = "/home/tianyi/external/FoundationStereo"
-DEFAULT_FOUNDATION_CKPT = "/home/tianyi/external/FoundationStereo/pretrained_models/23-51-11/model_best_bp2.pth"
-DEFAULT_FOUNDATION_CFG = "/home/tianyi/external/FoundationStereo/pretrained_models/23-51-11/cfg.yaml"
-DEFAULT_FOUNDATION_INTRINSIC = "/home/tianyi/external/FoundationStereo/assets/K.txt"
+DEFAULT_FOUNDATION_ROOT = os.environ.get("FOUNDATION_ROOT", "/path/to/FoundationStereo")
+DEFAULT_FOUNDATION_CKPT = os.environ.get(
+    "FOUNDATION_CKPT",
+    "/path/to/FoundationStereo/pretrained_models/23-51-11/model_best_bp2.pth",
+)
+DEFAULT_FOUNDATION_CFG = os.environ.get(
+    "FOUNDATION_CFG",
+    "/path/to/FoundationStereo/pretrained_models/23-51-11/cfg.yaml",
+)
+DEFAULT_FOUNDATION_INTRINSIC = os.environ.get(
+    "FOUNDATION_INTRINSIC_FILE",
+    "/path/to/FoundationStereo/assets/K.txt",
+)
+DEFAULT_COTRACKER_REPO = os.environ.get("COTRACKER_REPO", "/path/to/co-tracker")
 
 GATE_THRESHOLDS = {
     "1x": {
@@ -168,7 +179,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--foundation-cfg", default=DEFAULT_FOUNDATION_CFG)
     parser.add_argument("--foundation-intrinsic-file", default=DEFAULT_FOUNDATION_INTRINSIC)
     parser.add_argument("--foundation-valid-iters", type=int, default=32)
-    parser.add_argument("--cotracker-repo", default="/home/tianyi/co-tracker")
+    parser.add_argument("--cotracker-repo", default=DEFAULT_COTRACKER_REPO)
     parser.add_argument("--start", type=int, default=None)
     parser.add_argument("--stop", type=int, default=None)
     parser.add_argument("--step", type=int, default=None)

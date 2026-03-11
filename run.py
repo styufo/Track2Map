@@ -67,7 +67,7 @@ class SceneOptimizer():
         if os.path.isfile(track_file):
             self.pt_tracker = PointTracker(cfg, self.net, track_file)
         self.pt_tracker_backend = str(cfg['training'].get('pt_tracker_backend', 'gaussian3d')).lower()
-        self.pt_cotracker_repo = str(cfg['training'].get('pt_cotracker_repo', '/home/tianyi/co-tracker'))
+        self.pt_cotracker_repo = str(cfg['training'].get('pt_cotracker_repo', '/path/to/co-tracker'))
         self.pt_cotracker_model = str(cfg['training'].get('pt_cotracker_model', 'cotracker3_offline'))
         self.pt_cotracker_tracks = None
         self.pt_cotracker_vis = None
