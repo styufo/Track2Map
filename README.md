@@ -14,15 +14,6 @@ This repo keeps runnable paths for 3 practical modes:
 1. **`clean_pose`**: use dataset camera poses directly, no pose initialization from scratch, no pose optimization.
 2. **`noisy_auto_gate`**: start from noisy pose.
 3. **`no_pose`**: no camera pose provided; start from no prior and estimate+optimize online.
-
-Base sequence configs are stored in:
-
-- `configs/StereoMIS/P1_1.yaml`
-- `configs/StereoMIS/P2_0.yaml`
-- `configs/StereoMIS/P2_1.yaml`
-- `configs/StereoMIS/P3_1.yaml`
-- `configs/StereoMIS/P3_2.yaml`
-
 ---
 
 ## 1) Environment
@@ -49,42 +40,26 @@ Override these launcher defaults in your own path:
 ## 2) Dataset prepare
 Download the data from [StereoMIS Tracking](https://zenodo.org/records/10867949) and unpack it in the repository base folder.
 
-## 3) Generate noisy poses from GT (1x / 10x)
+If you want to test the model's ability under noisy pose, you can generate the noisy pose by the [script](scripts/perturb_stereomis_groundtruth.py) we provide.
 
 We provide a reproducible script to perturb StereoMIS `groundtruth.txt` and generate `groundtruth_noisy.txt`:
-
-- Script: `scripts/perturb_stereomis_groundtruth.py`
-- Output layout: `<out-root>/<SEQ>/groundtruth_noisy.txt`
-- Config templates:
-  - `configs/StereoMIS/noise/noisy_pose_1x.yaml`
-  - `configs/StereoMIS/noise/noisy_pose_10x.yaml`
-
 ### 1x noisy pose (light noise)
-
 ```bash
 python scripts/perturb_stereomis_groundtruth.py \
   --config configs/StereoMIS/noise/noisy_pose_1x.yaml
-```
-
-### 10x noisy pose (translation ×10)
-
-```bash
-python scripts/perturb_stereomis_groundtruth.py \
-  --config configs/StereoMIS/noise/noisy_pose_10x.yaml
-```
-
-`10x` means translation noise is scaled from `0.0006` to `0.006`, while rotation noise remains `0.6 deg`.
-
-CLI arguments override config fields, for example:
-
-```bash
-python scripts/perturb_stereomis_groundtruth.py \
-  --config configs/StereoMIS/noise/noisy_pose_1x.yaml \
   --input-root /path/to/steremis_tracking \
   --out-root /path/to/stereomis_noisy_light
 ```
 
-## 4) Unified launcher
+### 10x noisy pose (heavy noise)
+```bash
+python scripts/perturb_stereomis_groundtruth.py \
+  --config configs/StereoMIS/noise/noisy_pose_10x.yaml
+  --input-root /path/to/steremis_tracking \
+  --out-root /path/to/stereomis_noisy_heavy
+```
+
+## 3) Run
 
 Use `scripts/run_track2map.py` for all modes.
 
@@ -131,7 +106,7 @@ python scripts/run_track2map.py \
 ---
 
 
-## 5) Visual outputs
+## 4) Visual outputs
 
 `--visualize` render/mapping videos and related visualization outputs in each run folder.
 
@@ -139,5 +114,5 @@ For reconstruction metrics (`PSNR/SSIM/LPIPS`), run with `--visualize`; otherwis
 
 ---
 
-## 6) Acknowledgements
+## 5) Acknowledgements
 Our code is based on [Online-endo-track](https://github.com/mhayoz/online_endo_track), our depth estimation is based on [FoundationStereo](https://github.com/NVlabs/FoundationStereo), and our tracking method is based on [CoTracker3](https://github.com/facebookresearch/co-tracker). We thank the authors for their excellent work!
