@@ -40,9 +40,8 @@ Override these launcher defaults in your own path:
 ## 2) Dataset prepare
 Download the data from [StereoMIS Tracking](https://zenodo.org/records/10867949) and unpack it in the repository base folder.
 
-If you want to test the model's ability under noisy pose, you can generate the noisy pose by the [script](scripts/perturb_stereomis_groundtruth.py) we provide.
+If you want to test the model's ability under noisy pose, you can generate the noisy pose `groundtruth_noisy.txt` from gt camera pose `groundtruth.txt` by the [script](scripts/perturb_stereomis_groundtruth.py) we provide.
 
-We provide a reproducible script to perturb StereoMIS `groundtruth.txt` and generate `groundtruth_noisy.txt`:
 ### 1x noisy pose (light noise)
 ```bash
 python scripts/perturb_stereomis_groundtruth.py \
