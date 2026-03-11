@@ -3,6 +3,7 @@ import torch
 import cv2
 import os
 import sys
+from pathlib import Path
 
 try:
     from FoundationStereo.core.utils.utils import InputPadder
@@ -91,7 +92,8 @@ def _require_foundation():
         env_root = os.environ.get("FOUNDATION_STEREO_ROOT", "").strip()
         if env_root:
             candidates.append(os.path.abspath(os.path.expanduser(env_root)))
-        candidates.append("/path/to/FoundationStereo")
+        repo_default = Path(__file__).resolve().parents[2] / "foundationstereo"
+        candidates.append(str(repo_default.resolve()))
 
         for root in candidates:
             if not root:

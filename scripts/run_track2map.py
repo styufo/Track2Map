@@ -14,20 +14,20 @@ MODES = ["clean_pose", "noisy", "noisy_auto_gate", "no_pose"]
 FLOW_INIT_SOURCES = ["raft", "cotracker3", "hybrid", "foundation", "hybrid_foundation"]
 GATE_PROFILES = ["auto", "1x", "10x"]
 
-DEFAULT_FOUNDATION_ROOT = os.environ.get("FOUNDATION_ROOT", "/path/to/FoundationStereo")
+DEFAULT_FOUNDATION_ROOT = os.environ.get("FOUNDATION_ROOT", "foundationstereo")
 DEFAULT_FOUNDATION_CKPT = os.environ.get(
     "FOUNDATION_CKPT",
-    "/path/to/FoundationStereo/pretrained_models/23-51-11/model_best_bp2.pth",
+    "foundationstereo/pretrained_models/23-51-11/model_best_bp2.pth",
 )
 DEFAULT_FOUNDATION_CFG = os.environ.get(
     "FOUNDATION_CFG",
-    "/path/to/FoundationStereo/pretrained_models/23-51-11/cfg.yaml",
+    "foundationstereo/pretrained_models/23-51-11/cfg.yaml",
 )
 DEFAULT_FOUNDATION_INTRINSIC = os.environ.get(
     "FOUNDATION_INTRINSIC_FILE",
-    "/path/to/FoundationStereo/assets/K.txt",
+    "foundationstereo/assets/K.txt",
 )
-DEFAULT_COTRACKER_REPO = os.environ.get("COTRACKER_REPO", "/path/to/co-tracker")
+DEFAULT_COTRACKER_REPO = os.environ.get("COTRACKER_REPO", "cotracker")
 
 GATE_THRESHOLDS = {
     "1x": {
@@ -67,6 +67,16 @@ def infer_gate_profile_from_pose_file(pose_file: str) -> str:
     if any(tag in lower for tag in ("x10", "transx10", "noisyx10")):
         return "10x"
     return "1x"
+
+
+def resolve_path(path_like: str, repo_root: Path) -> Path:
+    path = Path(path_like).expanduser()
+    if path.is_absolute():
+        return path.resolve()
+    cwd_candidate = (Path.cwd() / path).resolve()
+    if cwd_candidate.exists():
+        return cwd_candidate
+    return (repo_root / path).resolve()
 
 
 def build_config(args: argparse.Namespace, repo_root: Path) -> Dict[str, Any]:
@@ -198,6 +208,12 @@ def main() -> int:
     args = parse_args()
     repo_root = Path(__file__).resolve().parents[1]
 
+    args.foundation_root = str(resolve_path(args.foundation_root, repo_root))
+    args.foundation_ckpt = str(resolve_path(args.foundation_ckpt, repo_root))
+    args.foundation_cfg = str(resolve_path(args.foundation_cfg, repo_root))
+    args.foundation_intrinsic_file = str(resolve_path(args.foundation_intrinsic_file, repo_root))
+    args.cotracker_repo = str(resolve_path(args.cotracker_repo, repo_root))
+
     for path_like in (args.foundation_ckpt, args.foundation_cfg, args.foundation_intrinsic_file):
         if not Path(path_like).is_file():
             raise FileNotFoundError(f"Missing file: {path_like}")
@@ -231,7 +247,7 @@ def main() -> int:
     print("[Track2Map] Generated config:", cfg_path)
     print("[Track2Map] Mode:", args.mode)
     print("[Track2Map] Sequence:", args.seq)
-    if args.mode == "noisy_auto_gate":
+    if args.mode in ("noisy", "noisy_auto_gate"):
         profile = cfg.get("track2map_runtime", {}).get("gate_profile_resolved", args.gate_profile)
         print("[Track2Map] Gate profile:", profile)
     print("[Track2Map] Command:", " ".join(cmd))

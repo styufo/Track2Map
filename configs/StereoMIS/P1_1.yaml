@@ -150,7 +150,7 @@ training:
   pruning_from_iter: 200
   pruning_interval: 100
   pt_tracker_backend: cotracker3_online
-  pt_cotracker_repo: /path/to/co-tracker
+  pt_cotracker_repo: cotracker
   pt_cotracker_model: cotracker3_online
   optical_flow_init_source: hybrid
   cotracker_flow_init_min_valid_points: 16

@@ -7,6 +7,7 @@ import csv
 import json
 import cv2
 import torch.nn.functional as F
+from pathlib import Path
 from torchvision.models.optical_flow import raft_large, Raft_Large_Weights
 from scipy.spatial import KDTree
 from scipy.spatial.transform import Rotation
@@ -67,7 +68,12 @@ class SceneOptimizer():
         if os.path.isfile(track_file):
             self.pt_tracker = PointTracker(cfg, self.net, track_file)
         self.pt_tracker_backend = str(cfg['training'].get('pt_tracker_backend', 'gaussian3d')).lower()
-        self.pt_cotracker_repo = str(cfg['training'].get('pt_cotracker_repo', '/path/to/co-tracker'))
+        repo_root = Path(__file__).resolve().parent
+        default_cotracker_repo = str((repo_root / "cotracker").resolve())
+        self.pt_cotracker_repo = str(cfg['training'].get('pt_cotracker_repo', default_cotracker_repo))
+        self.pt_cotracker_repo = str(Path(self.pt_cotracker_repo).expanduser())
+        if not os.path.isabs(self.pt_cotracker_repo):
+            self.pt_cotracker_repo = str((repo_root / self.pt_cotracker_repo).resolve())
         self.pt_cotracker_model = str(cfg['training'].get('pt_cotracker_model', 'cotracker3_offline'))
         self.pt_cotracker_tracks = None
         self.pt_cotracker_vis = None

@@ -12,7 +12,7 @@ https://github.com/user-attachments/assets/123937e6-a2f9-4f25-b45f-451067698e5f
 This repo keeps runnable paths for 3 practical modes:
 
 1. **`clean_pose`**: use dataset camera poses directly, no pose initialization from scratch, no pose optimization.
-2. **`noisy_auto_gate`**: start from noisy pose.
+2. **`noisy`**: start from noisy pose (auto gate enabled).
 3. **`no_pose`**: no camera pose provided; start from no prior and estimate+optimize online.
 ---
 
@@ -25,15 +25,23 @@ conda activate track2map
 pip install -e src/submodules/gaussian-rasterization
 pip install -e src/submodules/simple-knn
 ```
-Please set up the respective environments and permissions according to [CoTracker3-online](https://github.com/facebookresearch/co-tracker) and [FoundationStereo](https://github.com/NVlabs/FoundationStereo).
+Clone external dependencies into fixed folders in this repository:
 
-Override these launcher defaults in your own path:
+```bash
+git clone https://github.com/facebookresearch/co-tracker.git cotracker
+git clone https://github.com/NVlabs/FoundationStereo.git foundationstereo
+```
 
-- `--foundation-root `
-- `--foundation-ckpt `
-- `--foundation-cfg `
-- `--foundation-intrinsic-file `
+By default, launcher paths are:
 
+- `foundationstereo/`
+- `foundationstereo/pretrained_models/23-51-11/model_best_bp2.pth`
+- `foundationstereo/pretrained_models/23-51-11/cfg.yaml`
+- `foundationstereo/assets/K.txt`
+- `cotracker/`
+
+You can still override these with CLI args or environment variables:
+`FOUNDATION_ROOT`, `FOUNDATION_CKPT`, `FOUNDATION_CFG`, `FOUNDATION_INTRINSIC_FILE`, `COTRACKER_REPO`.
 
 
 ---
@@ -45,7 +53,7 @@ If you want to test the model's ability under noisy pose, you can generate the n
 ### 1x noisy pose (light noise)
 ```bash
 python scripts/perturb_stereomis_groundtruth.py \
-  --config configs/StereoMIS/noise/noisy_pose_1x.yaml
+  --config configs/StereoMIS/noise/noisy_pose_1x.yaml \
   --input-root /path/to/steremis_tracking \
   --out-root /path/to/stereomis_noisy_light
 ```
@@ -53,9 +61,9 @@ python scripts/perturb_stereomis_groundtruth.py \
 ### 10x noisy pose (heavy noise)
 ```bash
 python scripts/perturb_stereomis_groundtruth.py \
-  --config configs/StereoMIS/noise/noisy_pose_10x.yaml
+  --config configs/StereoMIS/noise/noisy_pose_10x.yaml \
   --input-root /path/to/steremis_tracking \
-  --out-root /path/to/stereomis_noisy_heavy
+  --out-root /path/to/stereomis_noisy_light_transx10
 ```
 
 ## 3) Run

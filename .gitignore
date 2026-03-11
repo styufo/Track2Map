@@ -25,6 +25,12 @@ tmp/
 *.log
 *.tmp
 
+# External dependencies cloned by users
+cotracker/*
+!cotracker/.gitkeep
+foundationstereo/*
+!foundationstereo/.gitkeep
+
 # System files
 .DS_Store
 Thumbs.db
