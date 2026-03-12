@@ -100,11 +100,21 @@ python scripts/run_track2map.py \
 ---
 
 
-## 4) Visual outputs
+## 4) Evaluation and Visual outputs
 
 `--visualize` render/mapping videos and related visualization outputs in each run folder.
 
 For reconstruction metrics (`PSNR/SSIM/LPIPS`), run with `--visualize`; otherwise `raw_rgb/raw_depth` may stay empty.
+
+Run the evaluation script to compute metrics:
+
+```bash
+python scripts/eval_track2map_metrics.py \
+  --seq P3_1 \
+  --input-root /path/to/steremis_tracking \
+  --output-dir /path/to/output/p31_nopose_found
+```
+
 
 ---
 
