@@ -12,7 +12,7 @@ https://github.com/user-attachments/assets/123937e6-a2f9-4f25-b45f-451067698e5f
 This repo keeps runnable paths for 3 practical modes:
 
 1. **`clean_pose`**: use dataset camera poses directly, no pose initialization from scratch, no pose optimization.
-2. **`noisy`**: start from noisy pose (auto gate enabled).
+2. **`noisy`**: start from noisy pose.
 3. **`no_pose`**: no camera pose provided; start from no prior and estimate+optimize online.
 ---
 
