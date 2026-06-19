@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Track2Map: Online Deformable SLAM with Motion-Aware Pose Optimization in Robotic Surgery. MICCAI 2026.">
+  <title>Track2Map | Online Deformable SLAM in Robotic Surgery</title>
+  <link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+  <header class="hero">
+    <nav class="nav">
+      <a href="#method">Method</a>
+      <a href="#results">Results</a>
+      <a href="#demo">Demo</a>
+      <a href="#citation">Citation</a>
+    </nav>
+
+    <div class="hero-inner">
+      <p class="venue">MICCAI 2026</p>
+      <h1>Track2Map: Online Deformable SLAM with Motion-Aware Pose Optimization in Robotic Surgery</h1>
+      <p class="authors">
+        Tianyi Song<sup>*</sup>, Sierra Bonilla<sup>*</sup>, Xinwei Ju, Evangelos Mazomenos,
+        Danail Stoyanov, Adam Schmidt, Omid Mohareri, Sophia Bano, Francisco Vasconcelos
+      </p>
+      <p class="affiliations">
+        University College London &nbsp;·&nbsp; UCL Hawkes Institute &nbsp;·&nbsp; Intuitive
+      </p>
+      <div class="buttons">
+        <a class="button primary disabled" href="#" aria-disabled="true" title="PDF link will be updated after the arXiv release.">Paper PDF (coming soon)</a>
+        <a class="button" href="https://github.com/styufo/Track2Map">Code</a>
+        <a class="button" href="#demo">Demo</a>
+        <a class="button" href="#citation">BibTeX</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="section tldr">
+      <h2>TL;DR</h2>
+      <p>
+        Track2Map is an online stereo 3D Gaussian Splatting pipeline for deformable surgical scenes.
+        It jointly refines camera trajectory and deformable anatomy, using dense 2D tracks to initialize
+        deformation and to gate pose updates during camera-static periods.
+      </p>
+      <div class="cards">
+        <article class="card">
+          <h3>Pose priors optional</h3>
+          <p>Runs with clean, noisy, or absent camera pose priors.</p>
+        </article>
+        <article class="card">
+          <h3>Motion-aware SLAM</h3>
+          <p>Reduces drift by avoiding pose updates when tissue/tool motion dominates.</p>
+        </article>
+        <article class="card">
+          <h3>Dense reconstruction</h3>
+          <p>Produces metric deformable 3D Gaussian reconstructions from surgical stereo video.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="method" class="section">
+      <div class="section-heading">
+        <p class="eyebrow">Method</p>
+        <h2>Tracking cues become geometry and pose constraints</h2>
+      </div>
+      <figure class="figure">
+        <img src="assets/method_overview.png" alt="Track2Map method overview">
+        <figcaption>
+          Given stereo RGB frames, estimated depth, and optional pose priors, Track2Map lifts tracked
+          2D correspondences into 3D anchors, initializes deformation, and updates camera pose only
+          when track statistics indicate camera-dominant motion.
+        </figcaption>
+      </figure>
+    </section>
+
+    <section id="results" class="section">
+      <div class="section-heading">
+        <p class="eyebrow">Results</p>
+        <h2>Robust reconstruction and camera tracking on StereoMIS</h2>
+      </div>
+      <div class="metric-grid">
+        <div class="metric">
+          <span class="metric-value">27.58</span>
+          <span class="metric-label">PSNR, no pose prior</span>
+        </div>
+        <div class="metric">
+          <span class="metric-value">27.56</span>
+          <span class="metric-label">PSNR, heavy pose noise</span>
+        </div>
+        <div class="metric">
+          <span class="metric-value">0.0285 m</span>
+          <span class="metric-label">ATE on StereoMIS</span>
+        </div>
+        <div class="metric">
+          <span class="metric-value">0.290°</span>
+          <span class="metric-label">Relative rotation error</span>
+        </div>
+      </div>
+
+      <div class="split">
+        <figure class="figure">
+          <img src="assets/pose_estimation.png" alt="Pose estimation comparison on StereoMIS">
+          <figcaption>
+            Track2Map follows the ground-truth trajectory more closely than Endo3R and EndoGSLAM-H
+            across three StereoMIS sequences.
+          </figcaption>
+        </figure>
+        <figure class="figure">
+          <img src="assets/qualitative_reconstruction.jpg" alt="Qualitative reconstruction under heavy pose noise">
+          <figcaption>
+            Under heavy pose noise, Track2Map preserves coherent anatomy while the pose-prior baseline
+            accumulates visible geometric distortions.
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="demo" class="section">
+      <div class="section-heading">
+        <p class="eyebrow">Demo</p>
+        <h2>Online mapping visualization</h2>
+      </div>
+      <div class="video-wrap">
+        <video controls preload="metadata">
+          <source src="assets/track2map_demo.mov" type="video/quicktime">
+          Your browser does not support embedded video. Download the demo video instead.
+        </video>
+      </div>
+      <p class="caption">
+        If the embedded video does not play in your browser, download
+        <a href="assets/track2map_demo.mov">the demo video</a>.
+      </p>
+    </section>
+
+    <section class="section">
+      <div class="section-heading">
+        <p class="eyebrow">Tracking module</p>
+        <h2>Dense 2D tracks provide a stable correspondence signal</h2>
+      </div>
+      <figure class="figure">
+        <img src="assets/tracking_noise.png" alt="Tracking benchmark and qualitative tracking comparison">
+        <figcaption>
+          We select the 2D correspondence module from surgical point-tracking benchmarks and use its
+          track statistics to initialize deformation and schedule pose refinement.
+        </figcaption>
+      </figure>
+    </section>
+
+    <section class="section limitations">
+      <h2>Scope and limitations</h2>
+      <ul>
+        <li>The main setting uses stereo RGB video; depth is estimated from stereo rather than provided as ground truth.</li>
+        <li>“Online” means frames are processed sequentially without future observations, not real-time latency.</li>
+        <li>The motion gate assumes camera-dominant and tissue/tool-dominant phases are separable; optical-axis motion remains a limitation.</li>
+      </ul>
+    </section>
+
+    <section id="citation" class="section">
+      <h2>Citation</h2>
+      <p class="caption">BibTeX will be updated once Springer/arXiv metadata is available.</p>
+      <pre><code>@inproceedings{song2026track2map,
+  title     = {Track2Map: Online Deformable SLAM with Motion-Aware Pose Optimization in Robotic Surgery},
+  author    = {Song, Tianyi and Bonilla, Sierra and Ju, Xinwei and Mazomenos, Evangelos and Stoyanov, Danail and Schmidt, Adam and Mohareri, Omid and Bano, Sophia and Vasconcelos, Francisco},
+  booktitle = {International Conference on Medical Image Computing and Computer-Assisted Intervention (MICCAI)},
+  year      = {2026}
+}</code></pre>
+    </section>
+  </main>
+
+  <footer>
+    <p><sup>*</sup> Equal contribution. For questions, contact <a href="mailto:tianyi.song.24@ucl.ac.uk">tianyi.song.24@ucl.ac.uk</a>.</p>
+  </footer>
+</body>
+</html>
