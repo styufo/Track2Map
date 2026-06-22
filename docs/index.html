@@ -10,9 +10,9 @@
 <body>
   <header class="hero">
     <nav class="nav">
+      <a href="#demo">Demo</a>
       <a href="#method">Method</a>
       <a href="#results">Results</a>
-      <a href="#demo">Demo</a>
       <a href="#citation">Citation</a>
     </nav>
 
@@ -57,6 +57,23 @@
           <p>Produces metric deformable 3D Gaussian reconstructions from surgical stereo video.</p>
         </article>
       </div>
+    </section>
+
+    <section id="demo" class="section">
+      <div class="section-heading">
+        <p class="eyebrow">Demo</p>
+        <h2>Online mapping visualization</h2>
+      </div>
+      <div class="video-wrap">
+        <video controls preload="metadata">
+          <source src="assets/track2map_demo.mp4" type="video/mp4">
+          Your browser does not support embedded video. Download the demo video instead.
+        </video>
+      </div>
+      <p class="caption">
+        If the embedded video does not play in your browser, download
+        <a href="assets/track2map_demo.mp4">the demo video</a>.
+      </p>
     </section>
 
     <section id="method" class="section">
@@ -116,41 +133,9 @@
       </div>
     </section>
 
-    <section id="demo" class="section">
-      <div class="section-heading">
-        <p class="eyebrow">Demo</p>
-        <h2>Online mapping visualization</h2>
-      </div>
-      <div class="video-wrap">
-        <video controls preload="metadata">
-          <source src="assets/track2map_demo.mp4" type="video/mp4">
-          Your browser does not support embedded video. Download the demo video instead.
-        </video>
-      </div>
-      <p class="caption">
-        If the embedded video does not play in your browser, download
-        <a href="assets/track2map_demo.mp4">the demo video</a>.
-      </p>
-    </section>
-
-    <section class="section">
-      <div class="section-heading">
-        <p class="eyebrow">Tracking module</p>
-        <h2>Dense 2D tracks provide a stable correspondence signal</h2>
-      </div>
-      <figure class="figure">
-        <img src="assets/tracking_noise.png" alt="Tracking benchmark and qualitative tracking comparison">
-        <figcaption>
-          We select the 2D correspondence module from surgical point-tracking benchmarks and use its
-          track statistics to initialize deformation and schedule pose refinement.
-        </figcaption>
-      </figure>
-    </section>
-
     <section class="section limitations">
       <h2>Scope and limitations</h2>
       <ul>
-        <li>The main setting uses stereo RGB video; depth is estimated from stereo rather than provided as ground truth.</li>
         <li>“Online” means frames are processed sequentially without future observations, not real-time latency.</li>
         <li>The motion gate assumes camera-dominant and tissue/tool-dominant phases are separable; optical-axis motion remains a limitation.</li>
       </ul>
@@ -159,12 +144,6 @@
     <section id="citation" class="section">
       <h2>Citation</h2>
       <p class="caption">BibTeX will be updated once Springer/arXiv metadata is available.</p>
-      <pre><code>@inproceedings{song2026track2map,
-  title     = {Track2Map: Online Deformable SLAM with Motion-Aware Pose Optimization in Robotic Surgery},
-  author    = {Song, Tianyi and Bonilla, Sierra and Ju, Xinwei and Mazomenos, Evangelos and Stoyanov, Danail and Schmidt, Adam and Mohareri, Omid and Bano, Sophia and Vasconcelos, Francisco},
-  booktitle = {International Conference on Medical Image Computing and Computer-Assisted Intervention (MICCAI)},
-  year      = {2026}
-}</code></pre>
     </section>
   </main>
 
