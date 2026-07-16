@@ -1,6 +1,6 @@
 # Track2Map
 
-Official repository for Track2Map: Online Deformable SLAM with Motion-Aware Pose Optimization in Robotic Surgery.
+Official repository for Track2Map: Online Deformable SLAM with Motion-Aware Pose Optimization in Robotic Surgery(MICCAI 2026).
 
 ## Demo Video
 
