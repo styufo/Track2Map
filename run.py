@@ -1,7 +1,9 @@
-import numpy as np
 import os
+
+os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
+
+import numpy as np
 import torch
-import wandb
 import warnings
 import csv
 import json
@@ -29,14 +31,30 @@ from src.utils.datasets import StereoMIS
 from src.utils.loss_utils import l1_loss, ssim, lpips_loss
 from src.utils.renderer import render, set_rasterizer_backend
 from src.utils.pose_utils import apply_se3_delta
+from src.utils.inference_policy import (
+    STRICT_GT_FREE,
+    enforce_inference_policy,
+    inference_policy,
+    poses_to_metric,
+    resolve_track_annotation_path,
+)
 from src.scene.gaussian_model import GaussianModel
+
+try:
+    import wandb
+    _WANDB_IMPORT_ERROR = None
+except Exception as exc:
+    wandb = None
+    _WANDB_IMPORT_ERROR = exc
 
 
 class SceneOptimizer():
     def __init__(self, cfg, args):
         self.total_iters = 0
+        cfg = enforce_inference_policy(cfg)
         self.cfg = cfg
         self.args = args
+        self.inference_policy = inference_policy(cfg)
         self.visualize = args.visualize
         self.save_widefield_ply_every = max(0, int(args.save_widefield_ply_every))
         self.widefield_ply_alpha_thr = float(args.widefield_ply_alpha_thr)
@@ -56,7 +74,9 @@ class SceneOptimizer():
 
         self.log_freq = args.log_freq
         self.log = args.log is not None
-        self.run_id = wandb.util.generate_id()
+        if self.log and wandb is None:
+            raise RuntimeError(f"W&B logging requested but wandb could not be imported: {_WANDB_IMPORT_ERROR}")
+        self.run_id = wandb.util.generate_id() if wandb is not None else None
         log_cfg = cfg.copy()
         log_cfg.update(vars(args))
         if self.log:
@@ -64,9 +84,26 @@ class SceneOptimizer():
         self.background = torch.tensor([0, 0, 0], dtype=torch.float32, device="cuda")
         self.dbg = args.debug
         self.pt_tracker = None
-        track_file = os.path.join(self.frame_reader.input_folder, 'track_pts.pckl')
-        if os.path.isfile(track_file):
+        self.track_noise_sigma_px = float(cfg['training'].get('track_noise_sigma_px', 0.0))
+        self.track_noise_seed = int(cfg['training'].get('track_noise_seed', 12345))
+        self.track_noise_preserve_first = bool(cfg['training'].get('track_noise_preserve_first', True))
+        self.track_noise_clamp_to_image = bool(cfg['training'].get('track_noise_clamp_to_image', True))
+        self.track_noise_apply_pointtracker = bool(cfg['training'].get('track_noise_apply_pointtracker', True))
+        self.track_noise_apply_cotracker = bool(cfg['training'].get('track_noise_apply_cotracker', True))
+        track_file, self.track_annotation_probe_performed = resolve_track_annotation_path(
+            self.frame_reader.input_folder,
+            cfg,
+        )
+        if track_file is not None:
             self.pt_tracker = PointTracker(cfg, self.net, track_file)
+            if self.track_noise_apply_pointtracker:
+                self.pt_tracker.gt_2d_pts = self._apply_track_noise(
+                    self.pt_tracker.gt_2d_pts,
+                    tag='pointtracker',
+                    time_dim=1,
+                )
+        if self.inference_policy == STRICT_GT_FREE and self.pt_tracker is not None:
+            raise RuntimeError("strict_gt_free invariant violated: PointTracker annotation was loaded.")
         self.pt_tracker_backend = str(cfg['training'].get('pt_tracker_backend', 'gaussian3d')).lower()
         repo_root = Path(__file__).resolve().parent
         default_cotracker_repo = str((repo_root / "cotracker").resolve())
@@ -75,10 +112,30 @@ class SceneOptimizer():
         if not os.path.isabs(self.pt_cotracker_repo):
             self.pt_cotracker_repo = str((repo_root / self.pt_cotracker_repo).resolve())
         self.pt_cotracker_model = str(cfg['training'].get('pt_cotracker_model', 'cotracker3_offline'))
+        self.pt_cotracker_runtime_mode = str(
+            cfg['training'].get('pt_cotracker_runtime_mode', 'precompute')
+        ).lower()
+        if self.pt_cotracker_runtime_mode not in ('precompute', 'online_prefix'):
+            warnings.warn(
+                f"Unknown pt_cotracker_runtime_mode={self.pt_cotracker_runtime_mode}, fallback to precompute."
+            )
+            self.pt_cotracker_runtime_mode = 'precompute'
+        if self.pt_cotracker_runtime_mode == 'online_prefix' and 'online' not in self.pt_cotracker_model.lower():
+            warnings.warn(
+                "pt_cotracker_runtime_mode=online_prefix requires an online CoTracker model; "
+                f"got {self.pt_cotracker_model}. Falling back to precompute."
+            )
+            self.pt_cotracker_runtime_mode = 'precompute'
         self.pt_cotracker_tracks = None
         self.pt_cotracker_vis = None
         self.pt_cotracker_tracks_deform = None
         self.pt_cotracker_vis_deform = None
+        self.pt_cotracker_prefix_frames = []
+        self.pt_cotracker_prefix_last_frame = -1
+        self.pt_cotracker_prefix_last_frame_deform = -1
+        self.pt_cotracker_queries = None
+        self.pt_cotracker_queries_deform = None
+        self.pt_cotracker_predictor = None
         self.pt_cotracker_gs_refine_enabled = bool(
             cfg['training'].get('pt_cotracker_gs_refine_enabled', False)
         )
@@ -2084,9 +2141,8 @@ class SceneOptimizer():
         return float(np.clip(value, 0.0, 1.0))
 
     def _frame_time(self, frame_id: int) -> float:
-        if self.n_img <= 1:
-            return 0.0
-        return float(frame_id) / float(self.n_img - 1)
+        denominator = float(self.frame_reader.deformation_time_denominator)
+        return float(frame_id) / denominator
 
     def _tool_motion_soft_weights(self, score: float):
         denom = max(self.tool_motion_moving_on - self.tool_motion_static_on, 1e-6)
@@ -2307,26 +2363,28 @@ class SceneOptimizer():
             final_psnr, final_ssim = self._compute_rgb_quality(gt_color, final_render, eval_mask)
 
         fail_reasons = []
-        if np.isfinite(final_psnr) and self.first_frame_pose_trust_gate_min_psnr > 0.0:
-            if final_psnr < self.first_frame_pose_trust_gate_min_psnr:
+        psnr_finite = bool(np.isfinite(init_psnr) and np.isfinite(final_psnr))
+        ssim_finite = bool(np.isfinite(init_ssim) and np.isfinite(final_ssim))
+        if self.first_frame_pose_trust_gate_min_psnr > 0.0:
+            if not np.isfinite(final_psnr):
+                fail_reasons.append('final_psnr_nonfinite')
+            elif final_psnr < self.first_frame_pose_trust_gate_min_psnr:
                 fail_reasons.append('psnr_below_min')
-        if np.isfinite(final_ssim) and self.first_frame_pose_trust_gate_min_ssim > 0.0:
-            if final_ssim < self.first_frame_pose_trust_gate_min_ssim:
+        if self.first_frame_pose_trust_gate_min_ssim > 0.0:
+            if not np.isfinite(final_ssim):
+                fail_reasons.append('final_ssim_nonfinite')
+            elif final_ssim < self.first_frame_pose_trust_gate_min_ssim:
                 fail_reasons.append('ssim_below_min')
-        if (
-            np.isfinite(init_psnr)
-            and np.isfinite(final_psnr)
-            and self.first_frame_pose_trust_gate_max_psnr_drop > 0.0
-            and (init_psnr - final_psnr) > self.first_frame_pose_trust_gate_max_psnr_drop
-        ):
-            fail_reasons.append('psnr_drop_too_large')
-        if (
-            np.isfinite(init_ssim)
-            and np.isfinite(final_ssim)
-            and self.first_frame_pose_trust_gate_max_ssim_drop > 0.0
-            and (init_ssim - final_ssim) > self.first_frame_pose_trust_gate_max_ssim_drop
-        ):
-            fail_reasons.append('ssim_drop_too_large')
+        if self.first_frame_pose_trust_gate_max_psnr_drop > 0.0:
+            if not psnr_finite:
+                fail_reasons.append('psnr_drop_nonfinite')
+            elif (init_psnr - final_psnr) > self.first_frame_pose_trust_gate_max_psnr_drop:
+                fail_reasons.append('psnr_drop_too_large')
+        if self.first_frame_pose_trust_gate_max_ssim_drop > 0.0:
+            if not ssim_finite:
+                fail_reasons.append('ssim_drop_nonfinite')
+            elif (init_ssim - final_ssim) > self.first_frame_pose_trust_gate_max_ssim_drop:
+                fail_reasons.append('ssim_drop_too_large')
 
         triggered = len(fail_reasons) > 0
         fallback_applied = False
@@ -2344,16 +2402,17 @@ class SceneOptimizer():
             'ff_pose_gate_triggered': bool(triggered),
             'ff_pose_gate_fallback_applied': bool(fallback_applied),
             'ff_pose_gate_fallback_mode': self.first_frame_pose_trust_gate_fallback_mode,
-            'ff_pose_gate_init_psnr': float(init_psnr),
-            'ff_pose_gate_init_ssim': float(init_ssim),
-            'ff_pose_gate_final_psnr': float(final_psnr),
-            'ff_pose_gate_final_ssim': float(final_ssim),
+            'ff_pose_gate_observations_finite': bool(psnr_finite and ssim_finite),
+            'ff_pose_gate_init_psnr': float(init_psnr) if np.isfinite(init_psnr) else None,
+            'ff_pose_gate_init_ssim': float(init_ssim) if np.isfinite(init_ssim) else None,
+            'ff_pose_gate_final_psnr': float(final_psnr) if np.isfinite(final_psnr) else None,
+            'ff_pose_gate_final_ssim': float(final_ssim) if np.isfinite(final_ssim) else None,
             'ff_pose_gate_psnr_drop': float(init_psnr - final_psnr)
             if np.isfinite(init_psnr) and np.isfinite(final_psnr)
-            else float('nan'),
+            else None,
             'ff_pose_gate_ssim_drop': float(init_ssim - final_ssim)
             if np.isfinite(init_ssim) and np.isfinite(final_ssim)
-            else float('nan'),
+            else None,
             'ff_pose_gate_reasons': '|'.join(fail_reasons) if triggered else 'pass',
             'ff_pose_gate_pose_init_mode_after': str(self.pose_init_mode),
             'ff_pose_gate_vo_enabled_after': bool(self.pose_no_prior_vo_enabled),
@@ -2398,7 +2457,185 @@ class SceneOptimizer():
         pts_next[:, 1].clamp_(0, H - 1)
         return pts_next
 
+    def _use_cotracker_online_prefix(self):
+        return self.pt_cotracker_runtime_mode == 'online_prefix'
+
+    def _frame_to_cotracker_rgb(self, frame: torch.Tensor):
+        if frame is None:
+            return None
+        if frame.ndim == 4:
+            frame = frame[0]
+        if frame.ndim != 3:
+            return None
+        if frame.shape[0] == 3:
+            image = frame.detach().to(device='cpu', dtype=torch.float32).permute(1, 2, 0)
+        elif frame.shape[-1] == 3:
+            image = frame.detach().to(device='cpu', dtype=torch.float32)
+        else:
+            return None
+        if image.max().item() <= 1.0 + 1e-6:
+            image = image * 255.0
+        return image.clamp(0.0, 255.0).to(torch.uint8).numpy()
+
+    def _append_cotracker_prefix_frame(self, frame_id: int, frame: torch.Tensor):
+        if not self._use_cotracker_online_prefix():
+            return False
+        if frame_id < 0:
+            return False
+        if frame_id < len(self.pt_cotracker_prefix_frames):
+            return True
+        if frame_id != len(self.pt_cotracker_prefix_frames):
+            return False
+        rgb = self._frame_to_cotracker_rgb(frame)
+        if rgb is None:
+            return False
+        self.pt_cotracker_prefix_frames.append(rgb)
+        return True
+
+    def _get_cotracker_predictor(self):
+        if self.pt_cotracker_predictor is None:
+            self.pt_cotracker_predictor = torch.hub.load(
+                self.pt_cotracker_repo,
+                self.pt_cotracker_model,
+                source='local',
+            ).to(self.device).eval()
+        return self.pt_cotracker_predictor
+
+    def _get_cotracker_main_queries(self):
+        if self.inference_policy == STRICT_GT_FREE:
+            raise RuntimeError("strict_gt_free forbids annotation-seeded CoTracker queries.")
+        if self.pt_tracker is None:
+            return None
+        if self.pt_cotracker_queries is None:
+            q_xy = self.pt_tracker.gt_2d_pts[:, 0].detach().to(device=self.device, dtype=torch.float32)
+            q_t = torch.zeros((q_xy.shape[0], 1), device=self.device, dtype=torch.float32)
+            self.pt_cotracker_queries = torch.cat([q_t, q_xy], dim=1)[None, ...]
+        return self.pt_cotracker_queries
+
+    def _run_cotracker_online_prefix(self, frames_rgb, queries):
+        if queries is None or len(frames_rgb) == 0:
+            return None, None
+        video = torch.from_numpy(np.stack(frames_rgb, axis=0)).permute(0, 3, 1, 2)[None, ...].float().to(self.device)
+        cotracker = self._get_cotracker_predictor()
+        with torch.no_grad():
+            cotracker(
+                video_chunk=video,
+                is_first_step=True,
+                queries=queries,
+            )
+            tracks, vis = cotracker(video_chunk=video, is_first_step=False)
+        if tracks is None:
+            return None, None
+        return tracks[0].detach(), vis[0].detach() if vis is not None else None
+
+    def _ensure_cotracker_tracks_online_prefix(self, frame_id: int):
+        if not self._use_cotracker_online_prefix():
+            return False
+        if self.pt_tracker is None:
+            return False
+        if frame_id < 0 or frame_id >= len(self.pt_cotracker_prefix_frames):
+            return False
+        if (
+            self.pt_cotracker_tracks is not None
+            and self.pt_cotracker_prefix_last_frame >= frame_id
+            and frame_id < int(self.pt_cotracker_tracks.shape[0])
+        ):
+            return True
+        try:
+            tracks, vis = self._run_cotracker_online_prefix(
+                self.pt_cotracker_prefix_frames[: frame_id + 1],
+                self._get_cotracker_main_queries(),
+            )
+        except Exception as exc:
+            warnings.warn(f"Online-prefix CoTracker init failed, fallback to gaussian3d tracker eval. reason: {exc}")
+            self.pt_tracker_backend = 'gaussian3d'
+            self.pt_cotracker_tracks = None
+            self.pt_cotracker_vis = None
+            return False
+        if tracks is None:
+            return False
+        tracks = tracks.detach()
+        if self.track_noise_apply_cotracker:
+            tracks = self._apply_track_noise(tracks, tag='cotracker_main_online_prefix', time_dim=0)
+        self.pt_cotracker_tracks = tracks
+        self.pt_cotracker_vis = vis
+        self.pt_cotracker_prefix_last_frame = int(tracks.shape[0]) - 1
+        return frame_id < int(tracks.shape[0])
+
+    def _ensure_cotracker_tracks_deform_online_prefix(
+        self,
+        frame_id: int,
+        ref_pose: torch.Tensor,
+        query_time: int = 0,
+    ):
+        if not self._use_cotracker_online_prefix():
+            return False
+        if frame_id < 0 or frame_id >= len(self.pt_cotracker_prefix_frames):
+            return False
+        if (
+            self.pt_cotracker_tracks_deform is not None
+            and self.pt_cotracker_prefix_last_frame_deform >= frame_id
+            and frame_id < int(self.pt_cotracker_tracks_deform.shape[0])
+        ):
+            return True
+        if self.pt_cotracker_queries_deform is None:
+            queries, _ = self._build_cotracker_anchor_queries(ref_pose=ref_pose, query_time=query_time)
+            if queries is None:
+                return False
+            self.pt_cotracker_queries_deform = queries
+        try:
+            tracks, vis = self._run_cotracker_online_prefix(
+                self.pt_cotracker_prefix_frames[: frame_id + 1],
+                self.pt_cotracker_queries_deform,
+            )
+        except Exception as exc:
+            warnings.warn(f"Online-prefix CoTracker anchor-query init failed. reason: {exc}")
+            self.pt_cotracker_tracks_deform = None
+            self.pt_cotracker_vis_deform = None
+            return False
+        if tracks is None:
+            return False
+        tracks = tracks.detach()
+        if self.track_noise_apply_cotracker:
+            tracks = self._apply_track_noise(tracks, tag='cotracker_deform_online_prefix', time_dim=0)
+        self.pt_cotracker_tracks_deform = tracks
+        self.pt_cotracker_vis_deform = vis
+        self.pt_cotracker_prefix_last_frame_deform = int(tracks.shape[0]) - 1
+        return frame_id < int(tracks.shape[0])
+
+    def _apply_track_noise(self, tracks: torch.Tensor, tag: str, time_dim: int = 0):
+        sigma = float(getattr(self, 'track_noise_sigma_px', 0.0))
+        if sigma <= 0.0 or tracks is None:
+            return tracks
+        if not isinstance(tracks, torch.Tensor):
+            return tracks
+        tracks = tracks.to(dtype=torch.float32)
+        generator = torch.Generator(device=tracks.device)
+        tag_offset = sum(ord(ch) for ch in str(tag))
+        generator.manual_seed(int(self.track_noise_seed) + int(tag_offset))
+        noise = torch.randn(
+            tracks.shape,
+            device=tracks.device,
+            dtype=tracks.dtype,
+            generator=generator,
+        ) * sigma
+        if self.track_noise_preserve_first and tracks.ndim > abs(time_dim):
+            noise = noise.clone()
+            index = [slice(None)] * tracks.ndim
+            index[time_dim] = 0
+            noise[tuple(index)] = 0.0
+        noisy = tracks + noise
+        if self.track_noise_clamp_to_image and noisy.shape[-1] >= 2:
+            H, W = self.camera.get_params()[:2]
+            noisy = noisy.clone()
+            noisy[..., 0].clamp_(0, W - 1)
+            noisy[..., 1].clamp_(0, H - 1)
+        return noisy
+
     def _prepare_cotracker_tracks(self):
+        if self._use_cotracker_online_prefix():
+            frame_id = len(self.pt_cotracker_prefix_frames) - 1
+            return self._ensure_cotracker_tracks_online_prefix(frame_id)
         if self.pt_tracker is None:
             return False
         if self.pt_cotracker_tracks is not None:
@@ -2447,7 +2684,10 @@ class SceneOptimizer():
                     tracks, vis = cotracker(video, queries=queries)
             if tracks is None:
                 return False
-            self.pt_cotracker_tracks = tracks[0].detach()
+            tracks0 = tracks[0].detach()
+            if self.track_noise_apply_cotracker:
+                tracks0 = self._apply_track_noise(tracks0, tag='cotracker_main_precompute', time_dim=0)
+            self.pt_cotracker_tracks = tracks0
             self.pt_cotracker_vis = vis[0].detach() if vis is not None else None
             return True
         except Exception as exc:
@@ -2547,6 +2787,13 @@ class SceneOptimizer():
         }
 
     def _prepare_cotracker_tracks_deform_anchor(self, ref_pose: torch.Tensor, query_time: int = 0):
+        if self._use_cotracker_online_prefix():
+            frame_id = len(self.pt_cotracker_prefix_frames) - 1
+            return self._ensure_cotracker_tracks_deform_online_prefix(
+                frame_id=frame_id,
+                ref_pose=ref_pose,
+                query_time=query_time,
+            )
         if self.pt_cotracker_tracks_deform is not None:
             return True
         if getattr(self.frame_reader, 'color_paths', None) is None:
@@ -2593,7 +2840,10 @@ class SceneOptimizer():
                     tracks, vis = cotracker(video, queries=queries)
             if tracks is None:
                 return False
-            self.pt_cotracker_tracks_deform = tracks[0].detach()
+            tracks0 = tracks[0].detach()
+            if self.track_noise_apply_cotracker:
+                tracks0 = self._apply_track_noise(tracks0, tag='cotracker_deform_precompute', time_dim=0)
+            self.pt_cotracker_tracks_deform = tracks0
             self.pt_cotracker_vis_deform = vis[0].detach() if vis is not None else None
             return True
         except Exception as exc:
@@ -3545,6 +3795,7 @@ class SceneOptimizer():
                 pose_delta is not None
                 and stage_state['pose_active']
                 and init_track_loss_value is not None
+                and self.pose_track_guard_enabled
             ):
                 with torch.no_grad():
                     guard_track_loss = self._pose_track_loss(current_c2w.detach(), frame_id)
@@ -3956,8 +4207,8 @@ class SceneOptimizer():
     def run(self):
         torch.cuda.empty_cache()
         pt_track_stats = {"pred_2d": [], "pred_3d": []}
-        input_pose_history = []
-        gt_pose_history = []
+        raw_input_pose_history = []
+        initialized_pose_history = []
         optimized_pose_history = []
         self.prev_input_pose_for_smooth = None
         self.prev_optimized_pose_for_smooth = None
@@ -3988,17 +4239,43 @@ class SceneOptimizer():
         self.pt_cotracker_tracks_deform = None
         self.pt_cotracker_vis_deform = None
         self.cotracker_deform_query_pose0 = None
+        self.pt_cotracker_prefix_frames = []
+        self.pt_cotracker_prefix_last_frame = -1
+        self.pt_cotracker_prefix_last_frame_deform = -1
+        self.pt_cotracker_queries = None
+        self.pt_cotracker_queries_deform = None
+        dataset_tool_mask_used = False
+        dataset_semantics_used = False
 
-        if self.pt_tracker is not None and self.pt_tracker_backend.startswith('cotracker3'):
+        if (
+            self.pt_tracker is not None
+            and self.pt_tracker_backend.startswith('cotracker3')
+            and (not self._use_cotracker_online_prefix())
+        ):
             self._prepare_cotracker_tracks()
 
-        for ids, gt_color, gt_color_r, gt_c2w, tool_mask, semantics in tqdm(self.frame_loader, total=self.n_img):
+        for ids, gt_color, gt_color_r, raw_input_c2w, tool_mask, semantics in tqdm(
+            self.frame_loader,
+            total=self.n_img,
+        ):
             frame_id = int(ids.item())
             gt_color = gt_color.cuda()
             gt_color_r = gt_color_r.cuda()
-            gt_c2w = gt_c2w.cuda()
+            raw_input_c2w = raw_input_c2w.cuda()
             tool_mask = tool_mask.cuda() if tool_mask is not None else None
+            dataset_tool_mask_used = dataset_tool_mask_used or tool_mask is not None
             semantics = semantics.float().cuda() if semantics is not None else None
+            dataset_semantics_used = dataset_semantics_used or semantics is not None
+            if self._use_cotracker_online_prefix():
+                self._append_cotracker_prefix_frame(frame_id, gt_color)
+                if (
+                    self.pt_tracker is not None
+                    and (
+                        self.pt_tracker_backend.startswith('cotracker3')
+                        or self.pose_no_prior_vo_corr_source in ('cotracker3', 'auto')
+                    )
+                ):
+                    self._prepare_cotracker_tracks()
             stereo_depth, flow_valid = self._get_input_depth(
                 frame_id=frame_id,
                 gt_color=gt_color,
@@ -4009,7 +4286,7 @@ class SceneOptimizer():
             pose_step_stats = None
             pose_locked_to_prev_opt = False
             frame_pose = self._init_pose_for_frame(
-                gt_c2w,
+                raw_input_c2w,
                 frame_id,
                 gt_color=gt_color,
                 stereo_depth=stereo_depth,
@@ -4190,8 +4467,13 @@ class SceneOptimizer():
             self.last_frame = gt_color.detach()
             self.prev_depth_for_pose_init = stereo_depth.detach()
             self.prev_tool_mask_for_motion = motion_mask.detach() if motion_mask is not None else None
-            input_pose_history.append(frame_pose.squeeze(0).detach().cpu())
-            gt_pose_history.append(gt_c2w.squeeze(0).detach().cpu())
+            if self.cfg.get('track2map_runtime', {}).get('experiment_mode') == 'clean_pose':
+                if not torch.allclose(frame_pose, raw_input_c2w, atol=1e-7, rtol=1e-7):
+                    raise RuntimeError(f"clean_pose invariant violated before optimization at frame {frame_id}.")
+                if not torch.allclose(optimized_c2w, raw_input_c2w, atol=1e-7, rtol=1e-7):
+                    raise RuntimeError(f"clean_pose invariant violated after optimization at frame {frame_id}.")
+            raw_input_pose_history.append(raw_input_c2w.squeeze(0).detach().cpu())
+            initialized_pose_history.append(frame_pose.squeeze(0).detach().cpu())
             optimized_pose_history.append(optimized_c2w.squeeze(0).detach().cpu())
             if frame_id == 0 and self.cotracker_deform_query_pose0 is None:
                 self.cotracker_deform_query_pose0 = optimized_c2w.detach()
@@ -4416,14 +4698,75 @@ class SceneOptimizer():
         with open(os.path.join(self.output, 'tracked.pckl'), 'wb') as f:
             pickle.dump(pt_track_stats, f)
 
-        if self.pose_opt_enabled and self.pose_save and len(optimized_pose_history) > 0:
-            input_poses = torch.stack(input_pose_history, dim=0).numpy()
-            optimized_poses = torch.stack(optimized_pose_history, dim=0).numpy()
-            gt_poses = torch.stack(gt_pose_history, dim=0).numpy() if len(gt_pose_history) == len(optimized_pose_history) else None
+        if self.pose_save and len(optimized_pose_history) > 0:
+            raw_input_poses_internal = torch.stack(raw_input_pose_history, dim=0).numpy()
+            initialized_poses_internal = torch.stack(initialized_pose_history, dim=0).numpy()
+            optimized_poses_internal = torch.stack(optimized_pose_history, dim=0).numpy()
+            input_poses = poses_to_metric(raw_input_poses_internal, self.scale)
+            initialized_poses = poses_to_metric(initialized_poses_internal, self.scale)
+            optimized_poses = poses_to_metric(optimized_poses_internal, self.scale)
+            pose_frame_ids = list(self.frame_reader.frame_ids)
+            if len(pose_frame_ids) != len(optimized_poses):
+                raise RuntimeError(
+                    "Pose/frame ID count mismatch before saving: "
+                    f"ids={len(pose_frame_ids)} poses={len(optimized_poses)}"
+                )
             np.save(os.path.join(self.output, 'input_c2w.npy'), input_poses)
+            np.save(os.path.join(self.output, 'initialized_c2w.npy'), initialized_poses)
             np.save(os.path.join(self.output, 'optimized_c2w.npy'), optimized_poses)
-            if gt_poses is not None:
-                np.save(os.path.join(self.output, 'gt_c2w.npy'), gt_poses)
+            with open(os.path.join(self.output, 'pose_frame_ids.json'), 'w') as f:
+                json.dump(pose_frame_ids, f, indent=2)
+            experiment_mode = self.cfg.get('track2map_runtime', {}).get('experiment_mode')
+            runtime_cfg = self.cfg.get('track2map_runtime', {})
+            input_pose_role = {
+                'clean_pose': 'oracle_ground_truth_input',
+                'light_noise': 'perturbed_ground_truth_input',
+                'heavy_noise': 'perturbed_ground_truth_input',
+                'no_pose': 'identity_initialization',
+            }.get(experiment_mode, 'unspecified')
+            pose_provenance = {
+                'inference_policy': self.inference_policy,
+                'experiment_mode': experiment_mode,
+                'run_kind': runtime_cfg.get('run_kind', 'adhoc'),
+                'pose_units': 'm',
+                'internal_translation_scale': float(self.scale),
+                'input_pose_source': self.frame_reader.pose_source,
+                'input_pose_file': self.frame_reader.pose_path,
+                'input_pose_role': input_pose_role,
+                'oracle_pose_input': bool(experiment_mode == 'clean_pose'),
+                'condition_input_verification': runtime_cfg.get('condition_input_verification'),
+                'dedicated_evaluation_pose_argument_loaded_by_inference': False,
+                'evaluation_pose_bytes_used_as_oracle_input': bool(experiment_mode == 'clean_pose'),
+                'dedicated_evaluation_pose_artifact_saved': False,
+                'input_pose_artifact_saved': True,
+                'oracle_input_pose_artifact_saved': bool(experiment_mode == 'clean_pose'),
+                'dataset_tool_mask_used_by_inference': bool(dataset_tool_mask_used),
+                'dataset_semantics_used_by_inference': bool(dataset_semantics_used),
+                'track_annotation_access': runtime_cfg.get('track_annotation_access'),
+                'track_annotation_probe_performed': bool(self.track_annotation_probe_performed),
+                'track_annotation_loaded': bool(self.pt_tracker is not None),
+                'determinism': {
+                    'random_seed': 0,
+                    'torch_deterministic_algorithms_enabled': bool(
+                        torch.are_deterministic_algorithms_enabled()
+                    ),
+                    'torch_deterministic_warn_only': bool(
+                        getattr(torch, 'is_deterministic_algorithms_warn_only_enabled', lambda: False)()
+                    ),
+                    'cublas_workspace_config': os.environ.get('CUBLAS_WORKSPACE_CONFIG'),
+                    'cudnn_deterministic': bool(torch.backends.cudnn.deterministic),
+                    'cudnn_benchmark': bool(torch.backends.cudnn.benchmark),
+                },
+                'num_frames': int(len(optimized_poses)),
+                'files': {
+                    'input': 'input_c2w.npy',
+                    'initialized': 'initialized_c2w.npy',
+                    'optimized': 'optimized_c2w.npy',
+                    'frame_ids': 'pose_frame_ids.json',
+                },
+            }
+            with open(os.path.join(self.output, 'pose_provenance.json'), 'w') as f:
+                json.dump(pose_provenance, f, indent=2)
             input_trans = torch.from_numpy(input_poses[:, :3, 3])
             optimized_trans = torch.from_numpy(optimized_poses[:, :3, 3])
             pose_delta_trans = torch.linalg.norm(optimized_trans - input_trans, dim=1)
@@ -4440,31 +4783,11 @@ class SceneOptimizer():
                 f"mean_rot_deg={pose_delta_rot_deg.mean().item():.6g}, "
                 f"max_rot_deg={pose_delta_rot_deg.max().item():.6g}"
             )
-            if gt_poses is not None:
-                gt_trans = torch.from_numpy(gt_poses[:, :3, 3])
-                pose_opt_to_gt_trans = torch.linalg.norm(optimized_trans - gt_trans, dim=1)
-                gt_rot = torch.from_numpy(gt_poses[:, :3, :3])
-                rel_opt_gt = torch.matmul(gt_rot.transpose(1, 2), optimized_rot)
-                cos_opt_gt = ((rel_opt_gt[:, 0, 0] + rel_opt_gt[:, 1, 1] + rel_opt_gt[:, 2, 2]) - 1.0) * 0.5
-                cos_opt_gt = torch.clamp(cos_opt_gt, min=-1.0, max=1.0)
-                pose_opt_to_gt_rot_deg = torch.rad2deg(torch.acos(cos_opt_gt))
-                print(
-                    "[PoseOpt] optimized->gt "
-                    f"mean_trans={pose_opt_to_gt_trans.mean().item():.6g}, "
-                    f"max_trans={pose_opt_to_gt_trans.max().item():.6g}, "
-                    f"mean_rot_deg={pose_opt_to_gt_rot_deg.mean().item():.6g}, "
-                    f"max_rot_deg={pose_opt_to_gt_rot_deg.max().item():.6g}"
-                )
             if self.log:
                 wandb.summary['pose_input_to_opt_mean_trans'] = pose_delta_trans.mean().item()
                 wandb.summary['pose_input_to_opt_max_trans'] = pose_delta_trans.max().item()
                 wandb.summary['pose_input_to_opt_mean_rot_deg'] = pose_delta_rot_deg.mean().item()
                 wandb.summary['pose_input_to_opt_max_rot_deg'] = pose_delta_rot_deg.max().item()
-                if gt_poses is not None:
-                    wandb.summary['pose_opt_to_gt_mean_trans'] = pose_opt_to_gt_trans.mean().item()
-                    wandb.summary['pose_opt_to_gt_max_trans'] = pose_opt_to_gt_trans.max().item()
-                    wandb.summary['pose_opt_to_gt_mean_rot_deg'] = pose_opt_to_gt_rot_deg.mean().item()
-                    wandb.summary['pose_opt_to_gt_max_rot_deg'] = pose_opt_to_gt_rot_deg.max().item()
 
         if self.tool_motion_gate_enabled and len(self.tool_motion_records) > 0:
             motion_csv = os.path.join(self.output, 'tool_motion_score.csv')
@@ -4506,6 +4829,10 @@ if __name__ == "__main__":
     np.random.seed(0)
     random.seed(0)
     torch.manual_seed(0)
+    torch.cuda.manual_seed_all(0)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.use_deterministic_algorithms(True, warn_only=True)
 
     torch.cuda.empty_cache()
     parser = ArgumentParser(description="Training script parameters")
@@ -4536,7 +4863,7 @@ if __name__ == "__main__":
     parser.add_argument('--widefield_ply_max_depth', type=float, default=0.0)
 
     args = parser.parse_args()
-    cfg = load_config(args.config, 'configs/base.yaml')
+    cfg = enforce_inference_policy(load_config(args.config, 'configs/base.yaml'))
     cfg['data']['output'] = args.output if args.output else cfg['data']['output']
 
     trainer = SceneOptimizer(cfg, args)
