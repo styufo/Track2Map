@@ -144,6 +144,13 @@ class ExplicitSparseDeformation(ExplicitDeformation):
     def get_deformed_means(self, means):
         return means + self.interpolate()[0]
 
+    def get_deformed_means_at_indices(self, means, indices):
+        neighbours = self.neighbours[indices]
+        weights = self.neighbour_weights[indices]
+        weight_sum = self.neighbour_weights_sum[indices]
+        means_def = (weights[..., None] * self.means_def[neighbours]).sum(dim=1) / weight_sum[..., None]
+        return means[indices] + means_def
+
     def get_new_params(self, shape):
         new_shape = ceil(shape[0]/self.subsample)
         new_means = torch.zeros(new_shape, 3, device='cuda')
@@ -294,11 +301,15 @@ class ExplicitSparseDeformation(ExplicitDeformation):
         return l_rigid, l_rot, l_iso, l_visible
 
     @torch.no_grad()
-    def init_from_flow(self, deformation, weights):
+    def init_anchors_from_flow(self, deformation, weights):
         weight_sum = weights.sum(-1)
         deformation = (weights[..., None] * deformation).sum(1) / weight_sum[..., None]
         deformation[weight_sum < 0.1] = 0.0
-        self.means_def += deformation[self.anchor_ids].clamp(-0.01, 0.01).float()
+        self.means_def += deformation.clamp(-0.01, 0.01).float()
+
+    @torch.no_grad()
+    def init_from_flow(self, deformation, weights):
+        self.init_anchors_from_flow(deformation[self.anchor_ids], weights[self.anchor_ids])
 
 
 class ExplicitSparseFDMDeformation(ExplicitSparseDeformation):
@@ -380,6 +391,14 @@ class ExplicitSparseFDMDeformation(ExplicitSparseDeformation):
     def get_deformed_means(self, means):
         means_def, _ = self.interpolate(n_points=means.shape[0], time=self.current_time)
         return means + means_def
+
+    def get_deformed_means_at_indices(self, means, indices):
+        anchor_means_def, _ = self._anchor_def_at_time(time=self.current_time)
+        neighbours = self.neighbours[indices]
+        weights = self.neighbour_weights[indices]
+        weight_sum = self.neighbour_weights_sum[indices]
+        means_def = (weights[..., None] * anchor_means_def[neighbours]).sum(dim=1) / weight_sum[..., None]
+        return means[indices] + means_def
 
     def get_new_params(self, shape):
         new_shape = ceil(shape[0] / self.subsample)
@@ -494,11 +513,11 @@ class ExplicitSparseFDMDeformation(ExplicitSparseDeformation):
         return l_rigid, l_rot, l_iso, l_visible
 
     @torch.no_grad()
-    def init_from_flow(self, deformation, weights):
+    def init_anchors_from_flow(self, deformation, weights):
         weight_sum = weights.sum(-1)
         deformation = (weights[..., None] * deformation).sum(1) / weight_sum[..., None]
         deformation[weight_sum < 0.1] = 0.0
-        deformation = deformation[self.anchor_ids].clamp(-0.01, 0.01).float()
+        deformation = deformation.clamp(-0.01, 0.01).float()
         basis = self._basis_weights(time=self.current_time).to(device=deformation.device, dtype=deformation.dtype)
         norm = (basis * basis).sum().clamp_min(1e-6)
         scale = basis / norm

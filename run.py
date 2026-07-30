@@ -2894,10 +2894,25 @@ class SceneOptimizer():
             }
 
         anchor_np = anchor_pts_world.detach().cpu().numpy()
-        gauss_np = self.net._deformation.get_deformed_means(self.net.get_xyz).detach().cpu().numpy()
+        deformation_model = self.net._deformation
+        deformation_anchor_ids = getattr(deformation_model, 'anchor_ids', None)
+        use_sparse_anchor_query = (
+            deformation_anchor_ids is not None
+            and deformation_anchor_ids.numel() > 0
+            and hasattr(deformation_model, 'get_deformed_means_at_indices')
+            and hasattr(deformation_model, 'init_anchors_from_flow')
+        )
+        if use_sparse_anchor_query:
+            query_pts = deformation_model.get_deformed_means_at_indices(
+                self.net.get_xyz,
+                deformation_anchor_ids,
+            )
+        else:
+            query_pts = deformation_model.get_deformed_means(self.net.get_xyz)
+        query_np = query_pts.detach().cpu().numpy()
         k = int(max(1, min(3, anchor_np.shape[0])))
         tree = KDTree(anchor_np)
-        neighbour_dists, neighbours = tree.query(gauss_np, k=k)
+        neighbour_dists, neighbours = tree.query(query_np, k=k)
         if k == 1:
             neighbour_dists = neighbour_dists[:, None]
             neighbours = neighbours[:, None]
@@ -2907,7 +2922,10 @@ class SceneOptimizer():
         weights = torch.exp(-50.0 * torch.from_numpy(neighbour_dists).to(device=dev, dtype=dtype))
         neighbours_t = torch.from_numpy(neighbours).to(device=dev, dtype=torch.long)
         deformation = motion_world[neighbours_t]
-        self.net._deformation.init_from_flow(deformation.clamp(-0.01, 0.01), weights)
+        if use_sparse_anchor_query:
+            deformation_model.init_anchors_from_flow(deformation.clamp(-0.01, 0.01), weights)
+        else:
+            deformation_model.init_from_flow(deformation.clamp(-0.01, 0.01), weights)
 
         info = {
             'deform_init_used': True,
@@ -2915,6 +2933,8 @@ class SceneOptimizer():
             'deform_init_reason': 'ok',
             'deform_init_points': int(anchor_pts_world.shape[0]),
             'deform_init_k': int(k),
+            'deform_init_query_mode': 'sparse_anchors' if use_sparse_anchor_query else 'all_gaussians',
+            'deform_init_query_points': int(query_pts.shape[0]),
         }
         if frame_id is not None:
             info['deform_init_frame'] = int(frame_id)
