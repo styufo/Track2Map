@@ -120,13 +120,3 @@ python scripts/eval_track2map_metrics.py \
 
 ## 5) Acknowledgements
 Our code is based on [Online-endo-track](https://github.com/mhayoz/online_endo_track), our depth estimation is based on [FoundationStereo](https://github.com/NVlabs/FoundationStereo), and our tracking method is based on [CoTracker3](https://github.com/facebookresearch/co-tracker). We thank the authors for their excellent work!
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=styufo%2FTrack2Map&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=styufo/Track2Map&type=date&theme=dark&legend=top-left&sealed_token=OA56aRfYiRIk1k65s40wvYfwmiWLzennkuF2OuPgiDrZsLEN0IAO07PvQrG3zvsU9leYETF0xv93GE_A5wrbGwTwJPVlED8nv5QZKhOr9EBpGhYuCvxqzQ" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=styufo/Track2Map&type=date&legend=top-left&sealed_token=OA56aRfYiRIk1k65s40wvYfwmiWLzennkuF2OuPgiDrZsLEN0IAO07PvQrG3zvsU9leYETF0xv93GE_A5wrbGwTwJPVlED8nv5QZKhOr9EBpGhYuCvxqzQ" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=styufo/Track2Map&type=date&legend=top-left&sealed_token=OA56aRfYiRIk1k65s40wvYfwmiWLzennkuF2OuPgiDrZsLEN0IAO07PvQrG3zvsU9leYETF0xv93GE_A5wrbGwTwJPVlED8nv5QZKhOr9EBpGhYuCvxqzQ" />
- </picture>
-</a>
